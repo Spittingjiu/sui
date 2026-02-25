@@ -27119,19 +27119,25 @@ var app = (0, import_express.default)();
 var PORT = Number(process.env.PORT || 8810);
 var PANEL_TOKEN = process.env.PANEL_TOKEN || import_crypto.default.randomBytes(18).toString("hex");
 var XRAY_PUBLIC_HOST = process.env.XRAY_PUBLIC_HOST || "";
-var PANEL_USER = process.env.PANEL_USER || "admin";
-var PANEL_PASS = process.env.PANEL_PASS || "admin123";
 var PANEL_SERVICE = process.env.PANEL_SERVICE || "sui-panel.service";
 var DATA_DIR = "/opt/cui-panel";
 var DATA_FILE = import_node_path.default.join(DATA_DIR, "inbounds.json");
+var FORWARDS_FILE = import_node_path.default.join(DATA_DIR, "forwards.json");
+var PANEL_SETTINGS_FILE = import_node_path.default.join(DATA_DIR, "panel-settings.json");
 var XRAY_DIR = "/etc/cui-xray";
 var XRAY_CONFIG = import_node_path.default.join(XRAY_DIR, "config.json");
 var XRAY_BIN = import_node_fs.default.existsSync("/usr/local/bin/xray") ? "/usr/local/bin/xray" : "/usr/local/x-ui/bin/xray-linux-amd64";
 var XRAY_SERVICE = "cui-xray-core.service";
 var sessions = /* @__PURE__ */ new Map();
 var state = { seq: 1, inbounds: [] };
+var forwardsState = { seq: 1, rules: [] };
+var panelSettings = {
+  username: process.env.PANEL_USER || "admin",
+  password: process.env.PANEL_PASS || "admin123",
+  panelPath: normalizePanelPath(process.env.PANEL_PATH || "/"),
+  forceResetPassword: true
+};
 app.use(import_express.default.json());
-app.use(import_express.default.static(import_node_path.default.join(process.cwd(), "public")));
 function j(v) {
   return JSON.stringify(v);
 }
@@ -27148,9 +27154,48 @@ function b64(s) {
 function b64u(s) {
   return Buffer.from(String(s)).toString("base64url");
 }
+function normalizePanelPath(v = "/") {
+  let p = String(v || "/").trim();
+  if (!p || p === "/") return "/";
+  if (!p.startsWith("/")) p = "/" + p;
+  p = p.replace(/\/+/g, "/").replace(/\/$/, "");
+  return p || "/";
+}
+function savePanelSettings() {
+  import_node_fs.default.writeFileSync(PANEL_SETTINGS_FILE, JSON.stringify(panelSettings, null, 2));
+}
+function loadPanelSettings() {
+  if (import_node_fs.default.existsSync(PANEL_SETTINGS_FILE)) {
+    const o = parseJ(import_node_fs.default.readFileSync(PANEL_SETTINGS_FILE, "utf8"), {});
+    panelSettings.username = String(o.username || panelSettings.username || "admin");
+    panelSettings.password = String(o.password || panelSettings.password || "admin123");
+    panelSettings.panelPath = normalizePanelPath(o.panelPath || panelSettings.panelPath || "/");
+    panelSettings.forceResetPassword = o.forceResetPassword !== void 0 ? !!o.forceResetPassword : false;
+  } else {
+    const hasHistory = import_node_fs.default.existsSync(DATA_FILE) || import_node_fs.default.existsSync("/etc/x-ui/x-ui.db");
+    panelSettings.forceResetPassword = hasHistory ? false : true;
+    savePanelSettings();
+  }
+}
 function ensureDirs() {
   import_node_fs.default.mkdirSync(DATA_DIR, { recursive: true });
   import_node_fs.default.mkdirSync(XRAY_DIR, { recursive: true });
+}
+function mountPanelStatic() {
+  const staticDir = import_node_path.default.join(process.cwd(), "public");
+  app.use((req, res, next) => {
+    if (req.path.startsWith("/api") || req.path.startsWith("/auth")) return next();
+    const pp = panelSettings.panelPath || "/";
+    if (pp === "/") return next();
+    if (req.path === "/") return res.redirect(pp);
+    if (req.path === pp || req.path.startsWith(pp + "/")) return next();
+    return res.status(404).send("Not Found");
+  });
+  if ((panelSettings.panelPath || "/") === "/") {
+    app.use(import_express.default.static(staticDir));
+  } else {
+    app.use(panelSettings.panelPath, import_express.default.static(staticDir));
+  }
 }
 function shell(cmd) {
   return (0, import_node_child_process.execSync)(cmd, { shell: "/bin/bash", stdio: "pipe" }).toString().trim();
@@ -27254,6 +27299,75 @@ function buildInbound(form = {}) {
 function writeState() {
   import_node_fs.default.writeFileSync(DATA_FILE, JSON.stringify(state, null, 2));
 }
+function writeForwardsState() {
+  import_node_fs.default.writeFileSync(FORWARDS_FILE, JSON.stringify(forwardsState, null, 2));
+}
+function normalizeForwardRule(x = {}) {
+  const protocol = String(x.protocol || "tcp").toLowerCase() === "udp" ? "udp" : "tcp";
+  return {
+    id: Number(x.id || 0),
+    listenPort: Number(x.listenPort || 0),
+    targetHost: String(x.targetHost || "").trim(),
+    targetPort: Number(x.targetPort || 0),
+    protocol,
+    enabled: x.enabled !== false,
+    remark: String(x.remark || "")
+  };
+}
+function unitNameByRule(rule) {
+  return `sui-forward-${rule.id}.service`;
+}
+function renderForwardUnit(rule) {
+  const relay = rule.protocol === "udp" ? `/usr/bin/socat -d -d UDP-RECVFROM:${rule.listenPort},fork,reuseaddr UDP-SENDTO:${rule.targetHost}:${rule.targetPort}` : `/usr/bin/socat -d -d TCP-LISTEN:${rule.listenPort},fork,reuseaddr TCP:${rule.targetHost}:${rule.targetPort}`;
+  return `[Unit]
+Description=SUI Port Forward #${rule.id} (${rule.protocol.toUpperCase()} ${rule.listenPort} -> ${rule.targetHost}:${rule.targetPort})
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=${relay}
+Restart=always
+RestartSec=1
+User=root
+
+[Install]
+WantedBy=multi-user.target
+`;
+}
+function applyForwardRule(rule) {
+  const unit = unitNameByRule(rule);
+  const unitPath = `/etc/systemd/system/${unit}`;
+  import_node_fs.default.writeFileSync(unitPath, renderForwardUnit(rule));
+  shell("systemctl daemon-reload");
+  if (rule.enabled) shell(`systemctl enable --now ${unit}`);
+  else shell(`systemctl disable --now ${unit} || true`);
+}
+function removeForwardRule(rule) {
+  const unit = unitNameByRule(rule);
+  const unitPath = `/etc/systemd/system/${unit}`;
+  try {
+    shell(`systemctl disable --now ${unit} || true`);
+  } catch {
+  }
+  if (import_node_fs.default.existsSync(unitPath)) import_node_fs.default.unlinkSync(unitPath);
+  try {
+    shell("systemctl daemon-reload");
+  } catch {
+  }
+}
+function refreshForwardStatus(rule) {
+  const unit = unitNameByRule(rule);
+  let active = "inactive", enabled = "disabled";
+  try {
+    active = shell(`systemctl is-active ${unit}`);
+  } catch {
+  }
+  try {
+    enabled = shell(`systemctl is-enabled ${unit}`);
+  } catch {
+  }
+  return { ...rule, service: unit, active, enabled };
+}
 function renderXrayConfig() {
   const inbounds = state.inbounds.filter((x) => x.enable).map((ib) => {
     const o = {
@@ -27305,6 +27419,55 @@ function applyAndRestart() {
     shell(`systemctl start ${XRAY_SERVICE}`);
   }
 }
+function applyBbrFq() {
+  const conf = [
+    "net.core.default_qdisc=fq",
+    "net.ipv4.tcp_congestion_control=bbr"
+  ].join("\n") + "\n";
+  import_node_fs.default.writeFileSync("/etc/sysctl.d/99-sui-bbr.conf", conf);
+  shell("modprobe tcp_bbr || true");
+  shell("sysctl --system >/dev/null");
+  return {
+    qdisc: shell("sysctl -n net.core.default_qdisc || true"),
+    cc: shell("sysctl -n net.ipv4.tcp_congestion_control || true")
+  };
+}
+function applyNetSysctlProfile() {
+  const conf = [
+    "fs.file-max = 1048576",
+    "net.core.somaxconn = 65535",
+    "net.core.netdev_max_backlog = 32768",
+    "net.ipv4.tcp_max_syn_backlog = 8192",
+    "net.ipv4.ip_local_port_range = 1024 65535",
+    "net.ipv4.tcp_fin_timeout = 15",
+    "net.ipv4.tcp_tw_reuse = 1",
+    "net.core.rmem_max = 67108864",
+    "net.core.wmem_max = 67108864",
+    "net.ipv4.tcp_rmem = 4096 87380 33554432",
+    "net.ipv4.tcp_wmem = 4096 65536 33554432",
+    "net.ipv4.tcp_mtu_probing = 1"
+  ].join("\n") + "\n";
+  import_node_fs.default.writeFileSync("/etc/sysctl.d/99-sui-net.conf", conf);
+  shell("sysctl --system >/dev/null");
+  return { ok: true };
+}
+function applyDnsProfile() {
+  const dir = "/etc/systemd/resolved.conf.d";
+  import_node_fs.default.mkdirSync(dir, { recursive: true });
+  const conf = [
+    "[Resolve]",
+    "DNS=1.1.1.1 8.8.8.8 2606:4700:4700::1111 2001:4860:4860::8888",
+    "FallbackDNS=9.9.9.9 1.0.0.1 2620:fe::fe 2606:4700:4700::1001",
+    "DNSStubListener=yes",
+    "DNSSEC=no"
+  ].join("\n") + "\n";
+  import_node_fs.default.writeFileSync(import_node_path.default.join(dir, "99-sui-dns.conf"), conf);
+  try {
+    shell("systemctl restart systemd-resolved");
+  } catch {
+  }
+  return { ok: true };
+}
 function migrateFromXuiDb() {
   try {
     if (!import_node_fs.default.existsSync("/etc/x-ui/x-ui.db")) return false;
@@ -27334,34 +27497,56 @@ PY`);
 }
 function loadState() {
   ensureDirs();
+  loadPanelSettings();
   ensureCoreService();
   if (import_node_fs.default.existsSync(DATA_FILE)) {
     state = JSON.parse(import_node_fs.default.readFileSync(DATA_FILE, "utf8"));
     state.seq ||= 1;
     state.inbounds ||= [];
-    applyAndRestart();
-    return;
+  } else {
+    const migrated = migrateFromXuiDb();
+    if (!migrated) state = { seq: 1, inbounds: [] };
+    writeState();
   }
-  const migrated = migrateFromXuiDb();
-  if (!migrated) state = { seq: 1, inbounds: [] };
-  writeState();
+  if (import_node_fs.default.existsSync(FORWARDS_FILE)) {
+    forwardsState = JSON.parse(import_node_fs.default.readFileSync(FORWARDS_FILE, "utf8"));
+    forwardsState.seq ||= 1;
+    forwardsState.rules = (forwardsState.rules || []).map(normalizeForwardRule).filter((r) => r.id > 0);
+  } else {
+    forwardsState = { seq: 1, rules: [] };
+    writeForwardsState();
+  }
+  for (const r of forwardsState.rules) {
+    try {
+      applyForwardRule(r);
+    } catch {
+    }
+  }
   applyAndRestart();
 }
 function auth(req, res, next) {
   if (req.headers["x-panel-token"] === PANEL_TOKEN) return next();
   const authz = String(req.headers.authorization || "");
   const tk = authz.startsWith("Bearer ") ? authz.slice(7).trim() : "";
-  const exp = sessions.get(tk);
-  if (tk && exp && exp > Date.now()) return next();
-  return res.status(401).json({ success: false, msg: "unauthorized" });
+  const sess = sessions.get(tk);
+  if (!tk || !sess || !sess.exp || sess.exp <= Date.now()) return res.status(401).json({ success: false, msg: "unauthorized" });
+  if (sess.mustReset) {
+    const allow = req.path === "/panel/settings" || req.path === "/panel/change-password" || req.path.startsWith("/system/");
+    if (!allow) return res.status(403).json({ success: false, msg: "\u9996\u6B21\u767B\u5F55\u8BF7\u5148\u91CD\u7F6E\u5BC6\u7801", code: "RESET_REQUIRED" });
+  }
+  req.sessionToken = tk;
+  req.session = sess;
+  return next();
 }
+mountPanelStatic();
 app.get("/api/health", (_req, res) => res.json({ ok: true, mode: "self-hosted" }));
 app.post("/auth/login", (req, res) => {
   const { username, password } = req.body || {};
-  if (String(username) !== PANEL_USER || String(password) !== PANEL_PASS) return res.status(401).json({ success: false, msg: "\u8D26\u53F7\u6216\u5BC6\u7801\u9519\u8BEF" });
+  if (String(username) !== panelSettings.username || String(password) !== panelSettings.password) return res.status(401).json({ success: false, msg: "\u8D26\u53F7\u6216\u5BC6\u7801\u9519\u8BEF" });
   const token = import_crypto.default.randomBytes(24).toString("hex");
-  sessions.set(token, Date.now() + 1e3 * 60 * 60 * 24 * 7);
-  res.json({ success: true, token, user: PANEL_USER });
+  const mustReset = !!panelSettings.forceResetPassword;
+  sessions.set(token, { exp: Date.now() + 1e3 * 60 * 60 * 24 * 7, mustReset });
+  res.json({ success: true, token, user: panelSettings.username, mustReset, panelPath: panelSettings.panelPath || "/" });
 });
 app.post("/auth/logout", (req, res) => {
   const authz = String(req.headers.authorization || "");
@@ -27372,11 +27557,116 @@ app.post("/auth/logout", (req, res) => {
 app.get("/auth/me", (req, res) => {
   const authz = String(req.headers.authorization || "");
   const tk = authz.startsWith("Bearer ") ? authz.slice(7).trim() : "";
-  const exp = sessions.get(tk);
-  if (tk && exp && exp > Date.now()) return res.json({ success: true, user: PANEL_USER });
+  const sess = sessions.get(tk);
+  if (tk && sess && sess.exp > Date.now()) return res.json({ success: true, user: panelSettings.username, mustReset: !!sess.mustReset, panelPath: panelSettings.panelPath || "/" });
   res.status(401).json({ success: false });
 });
 app.use("/api", auth);
+app.get("/api/panel/settings", (req, res) => {
+  res.json({ success: true, obj: { username: panelSettings.username, panelPath: panelSettings.panelPath || "/", forceResetPassword: !!panelSettings.forceResetPassword } });
+});
+app.post("/api/panel/settings", (req, res) => {
+  try {
+    const username = String(req.body?.username || "").trim();
+    const panelPath = normalizePanelPath(req.body?.panelPath || "/");
+    if (username) panelSettings.username = username;
+    panelSettings.panelPath = panelPath;
+    savePanelSettings();
+    res.json({ success: true, obj: { username: panelSettings.username, panelPath: panelSettings.panelPath }, msg: "\u8BBE\u7F6E\u5DF2\u4FDD\u5B58\uFF0C\u8DEF\u5F84\u4FEE\u6539\u91CD\u542F\u540E\u751F\u6548" });
+  } catch (e) {
+    res.status(500).json({ success: false, msg: e.message });
+  }
+});
+app.post("/api/panel/change-password", (req, res) => {
+  try {
+    const oldPassword = String(req.body?.oldPassword || "");
+    const newPassword = String(req.body?.newPassword || "");
+    if (!newPassword || newPassword.length < 6) return res.status(400).json({ success: false, msg: "\u65B0\u5BC6\u7801\u81F3\u5C116\u4F4D" });
+    const needOld = !req.session?.mustReset;
+    if (needOld && oldPassword !== panelSettings.password) return res.status(400).json({ success: false, msg: "\u65E7\u5BC6\u7801\u9519\u8BEF" });
+    panelSettings.password = newPassword;
+    panelSettings.forceResetPassword = false;
+    savePanelSettings();
+    if (req.sessionToken) {
+      const s = sessions.get(req.sessionToken) || {};
+      s.mustReset = false;
+      sessions.set(req.sessionToken, s);
+    }
+    res.json({ success: true, msg: "\u5BC6\u7801\u5DF2\u66F4\u65B0" });
+  } catch (e) {
+    res.status(500).json({ success: false, msg: e.message });
+  }
+});
+app.get("/api/forwards", (_req, res) => {
+  try {
+    const list = (forwardsState.rules || []).map(refreshForwardStatus);
+    res.json({ success: true, obj: list });
+  } catch (e) {
+    res.status(500).json({ success: false, msg: e.message });
+  }
+});
+app.post("/api/forwards", (req, res) => {
+  try {
+    const listenPort = Number(req.body?.listenPort || 0);
+    const targetHost = String(req.body?.targetHost || "").trim();
+    const targetPort = Number(req.body?.targetPort || 0);
+    const protocol = String(req.body?.protocol || "tcp").toLowerCase() === "udp" ? "udp" : "tcp";
+    const remark = String(req.body?.remark || "").trim();
+    if (!listenPort || listenPort < 1 || listenPort > 65535) return res.status(400).json({ success: false, msg: "\u76D1\u542C\u7AEF\u53E3\u65E0\u6548" });
+    if (!targetHost) return res.status(400).json({ success: false, msg: "\u76EE\u6807IP\u4E0D\u80FD\u4E3A\u7A7A" });
+    if (!targetPort || targetPort < 1 || targetPort > 65535) return res.status(400).json({ success: false, msg: "\u76EE\u6807\u7AEF\u53E3\u65E0\u6548" });
+    if (forwardsState.rules.some((x) => Number(x.listenPort) === listenPort && x.protocol === protocol)) {
+      return res.status(400).json({ success: false, msg: "\u8BE5\u534F\u8BAE\u4E0B\u76D1\u542C\u7AEF\u53E3\u5DF2\u5B58\u5728" });
+    }
+    try {
+      shell("command -v socat");
+    } catch {
+      return res.status(400).json({ success: false, msg: "\u7F3A\u5C11\u4F9D\u8D56 socat\uFF0C\u8BF7\u5148\u5B89\u88C5: apt-get install -y socat" });
+    }
+    const rule = normalizeForwardRule({
+      id: forwardsState.seq++,
+      listenPort,
+      targetHost,
+      targetPort,
+      protocol,
+      enabled: true,
+      remark
+    });
+    forwardsState.rules.push(rule);
+    applyForwardRule(rule);
+    writeForwardsState();
+    res.json({ success: true, obj: refreshForwardStatus(rule), msg: "\u7AEF\u53E3\u8F6C\u53D1\u5DF2\u521B\u5EFA" });
+  } catch (e) {
+    res.status(500).json({ success: false, msg: e.message });
+  }
+});
+app.post("/api/forwards/:id/toggle", (req, res) => {
+  try {
+    const id = Number(req.params.id || 0);
+    const r = forwardsState.rules.find((x) => x.id === id);
+    if (!r) return res.status(404).json({ success: false, msg: "not found" });
+    r.enabled = !r.enabled;
+    applyForwardRule(r);
+    writeForwardsState();
+    res.json({ success: true, obj: refreshForwardStatus(r) });
+  } catch (e) {
+    res.status(500).json({ success: false, msg: e.message });
+  }
+});
+app.delete("/api/forwards/:id", (req, res) => {
+  try {
+    const id = Number(req.params.id || 0);
+    const idx = forwardsState.rules.findIndex((x) => x.id === id);
+    if (idx < 0) return res.status(404).json({ success: false, msg: "not found" });
+    const r = forwardsState.rules[idx];
+    removeForwardRule(r);
+    forwardsState.rules.splice(idx, 1);
+    writeForwardsState();
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ success: false, msg: e.message });
+  }
+});
 function refreshInboundTraffic() {
   try {
     const out = shell(`${XRAY_BIN} api statsquery --server=127.0.0.1:10085 -pattern 'inbound>>>' 2>/dev/null || true`);
@@ -27509,6 +27799,40 @@ app.post("/api/system/restart-xui", async (_req, res) => {
   try {
     shell(`systemctl restart ${XRAY_SERVICE}`);
     res.json({ success: true, msg: "xray restarted" });
+  } catch (e) {
+    res.status(500).json({ success: false, msg: e.message });
+  }
+});
+app.post("/api/system/optimize/bbr", async (_req, res) => {
+  try {
+    const obj = applyBbrFq();
+    res.json({ success: true, obj, msg: "BBR + fq \u5DF2\u5E94\u7528" });
+  } catch (e) {
+    res.status(500).json({ success: false, msg: e.message });
+  }
+});
+app.post("/api/system/optimize/dns", async (_req, res) => {
+  try {
+    const obj = applyDnsProfile();
+    res.json({ success: true, obj, msg: "DNS \u914D\u7F6E\u5DF2\u5E94\u7528" });
+  } catch (e) {
+    res.status(500).json({ success: false, msg: e.message });
+  }
+});
+app.post("/api/system/optimize/sysctl", async (_req, res) => {
+  try {
+    const obj = applyNetSysctlProfile();
+    res.json({ success: true, obj, msg: "\u7F51\u7EDC\u6808\u53C2\u6570\u5DF2\u5E94\u7528" });
+  } catch (e) {
+    res.status(500).json({ success: false, msg: e.message });
+  }
+});
+app.post("/api/system/optimize/all", async (_req, res) => {
+  try {
+    const bbr = applyBbrFq();
+    const dns = applyDnsProfile();
+    const sysctl = applyNetSysctlProfile();
+    res.json({ success: true, obj: { bbr, dns, sysctl }, msg: "\u5168\u90E8\u4F18\u5316\u5DF2\u5E94\u7528" });
   } catch (e) {
     res.status(500).json({ success: false, msg: e.message });
   }
