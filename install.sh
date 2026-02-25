@@ -32,7 +32,7 @@ apt_base(){
   dpkg --configure -a || true
   apt-get -f install -y || true
   apt-get update -y
-  apt-get install -y curl ca-certificates rsync unzip
+  apt-get install -y curl ca-certificates rsync unzip socat
 }
 
 write_env(){

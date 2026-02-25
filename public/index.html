@@ -65,6 +65,19 @@
       <span id="si" class="badge">Inbounds:-</span>
     </div>
 
+    <div class="card">
+      <div class="row" style="margin-bottom:8px"><b>端口转发</b><span class="muted">输入目标IP和端口创建转发</span></div>
+      <div class="row">
+        <input id="fw_listen" placeholder="监听端口(如 12345)" style="width:170px" />
+        <select id="fw_protocol" style="width:100px"><option value="tcp">TCP</option><option value="udp">UDP</option></select>
+        <input id="fw_target_host" placeholder="目标IP/域名" style="width:220px" />
+        <input id="fw_target_port" placeholder="目标端口" style="width:140px" />
+        <input id="fw_remark" placeholder="备注(可选)" class="grow" />
+        <button onclick="addForward()">添加转发</button>
+      </div>
+      <div id="fw_list" style="margin-top:10px"></div>
+    </div>
+
     <div id="list"></div>
   </div>
 
@@ -142,6 +155,7 @@ let all=[],editId=null,forceReset=false;
 const sniPool=['www.cloudflare.com','www.microsoft.com','www.apple.com','www.bing.com','www.amazon.com'];
 const q=$('q'), list=$('list'), cv=$('cv'), mt=$('mt'), login=$('login'), app=$('app'), lu=$('lu'), lp=$('lp'), le=$('le');
 const qrModal=$('qrModal'), qrImg=$('qrImg'), qrLink=$('qrLink'), sp=$('sp'), sx=$('sx'), si=$('si');
+const fwList=$('fw_list'), fwListen=$('fw_listen'), fwProtocol=$('fw_protocol'), fwTargetHost=$('fw_target_host'), fwTargetPort=$('fw_target_port'), fwRemark=$('fw_remark');
 const tabMain=$('tab-main'), tabSettings=$('tab-settings'), forceResetTip=$('forceResetTip');
 const setUser=$('set_user'), setPath=$('set_path'), setOldPass=$('set_old_pass'), setNewPass=$('set_new_pass');
 
@@ -187,7 +201,12 @@ function applyNodeSpeedPreset(){f_protocol.value='vless';f_network.value='tcp';f
 async function loadCur(){const r=await api('/api/system/xray/version-current');if(r.success){cv.textContent='当前 Xray: '+((r.obj.binary||'-')+' / '+(r.obj.panel||'-'));return;}cv.textContent='当前 Xray: 获取失败'}
 async function loadStatus(){const r=await api('/api/system/status');if(!r.success){sp.textContent='Panel:err';sx.textContent='Xray:err';si.textContent='Inbounds:err';sp.title=sx.title=si.title=(r.msg||'status failed');return;}const o=r.obj||{};const ok=v=>v==='active';sp.textContent='Panel:'+((o.panel?.active)||'-');sp.className='badge '+(ok(o.panel?.active)?'status-ok':'status-bad');sx.textContent='Xray:'+((o.xray?.active)||'-')+(o.xrayVersion?(' · '+o.xrayVersion):'');sx.className='badge '+(ok(o.xray?.active)?'status-ok':'status-bad');si.textContent='Inbounds:'+(o.inboundsEnabled??'-')+'/'+(o.inboundsTotal??'-')}
 
-async function init(){q.oninput=render;f_protocol.onchange=tune;f_network.onchange=tune;f_security.onchange=tune;switchTab('main');await loadPanelSettings();await loadCur();await loadStatus();if(!forceReset)await loadData();setInterval(loadStatus,10000)}
+async function loadForwards(){const r=await api('/api/forwards');if(!r.success){fwList.innerHTML='<div class="muted">加载失败：'+(r.msg||'unknown')+'</div>';return;}const arr=r.obj||[];if(!arr.length){fwList.innerHTML='<div class="muted">暂无转发规则</div>';return;}fwList.innerHTML='';for(const x of arr){const row=document.createElement('div');row.className='row';row.style.margin='6px 0';const on=x.active==='active';row.innerHTML=`<span class='badge'>#${x.id}</span><span class='badge'>${(x.protocol||'tcp').toUpperCase()}</span><span class='badge'>:${x.listenPort} → ${x.targetHost}:${x.targetPort}</span><span class='badge ${on?'status-ok':'status-bad'}'>${x.active||'-'}</span><span class='muted'>${x.remark||''}</span><span class='grow'></span><button onclick='toggleForward(${x.id})'>${x.enabled?'停用':'启用'}</button><button class='danger' onclick='delForward(${x.id})'>删除</button>`;fwList.appendChild(row);}}
+async function addForward(){const listenPort=Number(fwListen.value||0),targetPort=Number(fwTargetPort.value||0),targetHost=(fwTargetHost.value||'').trim(),protocol=(fwProtocol.value||'tcp'),remark=(fwRemark.value||'').trim();if(!listenPort||!targetHost||!targetPort)return alert('请填写监听端口/目标IP/目标端口');const r=await api('/api/forwards',{method:'POST',body:JSON.stringify({listenPort,targetHost,targetPort,protocol,remark})});if(!r.success)return alert(r.msg||'创建失败');fwListen.value='';fwTargetHost.value='';fwTargetPort.value='';fwRemark.value='';loadForwards();}
+async function toggleForward(id){const r=await api('/api/forwards/'+id+'/toggle',{method:'POST',body:'{}'});if(!r.success)return alert(r.msg||'操作失败');loadForwards();}
+async function delForward(id){if(!confirm('确认删除该转发规则?'))return;const r=await api('/api/forwards/'+id,{method:'DELETE'});if(!r.success)return alert(r.msg||'删除失败');loadForwards();}
+
+async function init(){q.oninput=render;f_protocol.onchange=tune;f_network.onchange=tune;f_security.onchange=tune;switchTab('main');await loadPanelSettings();await loadCur();await loadStatus();await loadForwards();if(!forceReset)await loadData();setInterval(loadStatus,10000);setInterval(loadForwards,12000)}
 (async()=>{if(localStorage.sessionToken){const me=await api('/auth/me');if(me.success){forceReset=!!me.mustReset;login.style.display='none';app.style.display='block';init();if(forceReset){switchTab('settings');forceResetTip.style.display='block';}return;}localStorage.removeItem('sessionToken');}login.style.display='block';app.style.display='none';})();
 </script>
 </body>

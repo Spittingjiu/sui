@@ -13,6 +13,7 @@ const PANEL_SERVICE = process.env.PANEL_SERVICE || 'sui-panel.service';
 
 const DATA_DIR = '/opt/cui-panel';
 const DATA_FILE = path.join(DATA_DIR, 'inbounds.json');
+const FORWARDS_FILE = path.join(DATA_DIR, 'forwards.json');
 const PANEL_SETTINGS_FILE = path.join(DATA_DIR, 'panel-settings.json');
 const XRAY_DIR = '/etc/cui-xray';
 const XRAY_CONFIG = path.join(XRAY_DIR, 'config.json');
@@ -21,6 +22,7 @@ const XRAY_SERVICE = 'cui-xray-core.service';
 
 const sessions = new Map();
 let state = { seq: 1, inbounds: [] };
+let forwardsState = { seq: 1, rules: [] };
 let panelSettings = {
   username: process.env.PANEL_USER || 'admin',
   password: process.env.PANEL_PASS || 'admin123',
@@ -168,6 +170,57 @@ function writeState() {
   fs.writeFileSync(DATA_FILE, JSON.stringify(state, null, 2));
 }
 
+function writeForwardsState() {
+  fs.writeFileSync(FORWARDS_FILE, JSON.stringify(forwardsState, null, 2));
+}
+
+function normalizeForwardRule(x = {}) {
+  const protocol = String(x.protocol || 'tcp').toLowerCase() === 'udp' ? 'udp' : 'tcp';
+  return {
+    id: Number(x.id || 0),
+    listenPort: Number(x.listenPort || 0),
+    targetHost: String(x.targetHost || '').trim(),
+    targetPort: Number(x.targetPort || 0),
+    protocol,
+    enabled: x.enabled !== false,
+    remark: String(x.remark || '')
+  };
+}
+
+function unitNameByRule(rule) { return `sui-forward-${rule.id}.service`; }
+
+function renderForwardUnit(rule) {
+  const relay = rule.protocol === 'udp'
+    ? `/usr/bin/socat -d -d UDP-RECVFROM:${rule.listenPort},fork,reuseaddr UDP-SENDTO:${rule.targetHost}:${rule.targetPort}`
+    : `/usr/bin/socat -d -d TCP-LISTEN:${rule.listenPort},fork,reuseaddr TCP:${rule.targetHost}:${rule.targetPort}`;
+  return `[Unit]\nDescription=SUI Port Forward #${rule.id} (${rule.protocol.toUpperCase()} ${rule.listenPort} -> ${rule.targetHost}:${rule.targetPort})\nAfter=network.target\n\n[Service]\nType=simple\nExecStart=${relay}\nRestart=always\nRestartSec=1\nUser=root\n\n[Install]\nWantedBy=multi-user.target\n`;
+}
+
+function applyForwardRule(rule) {
+  const unit = unitNameByRule(rule);
+  const unitPath = `/etc/systemd/system/${unit}`;
+  fs.writeFileSync(unitPath, renderForwardUnit(rule));
+  shell('systemctl daemon-reload');
+  if (rule.enabled) shell(`systemctl enable --now ${unit}`);
+  else shell(`systemctl disable --now ${unit} || true`);
+}
+
+function removeForwardRule(rule) {
+  const unit = unitNameByRule(rule);
+  const unitPath = `/etc/systemd/system/${unit}`;
+  try { shell(`systemctl disable --now ${unit} || true`); } catch {}
+  if (fs.existsSync(unitPath)) fs.unlinkSync(unitPath);
+  try { shell('systemctl daemon-reload'); } catch {}
+}
+
+function refreshForwardStatus(rule) {
+  const unit = unitNameByRule(rule);
+  let active = 'inactive', enabled = 'disabled';
+  try { active = shell(`systemctl is-active ${unit}`); } catch {}
+  try { enabled = shell(`systemctl is-enabled ${unit}`); } catch {}
+  return { ...rule, service: unit, active, enabled };
+}
+
 function renderXrayConfig() {
   const inbounds = state.inbounds.filter(x => x.enable).map((ib) => {
     const o = {
@@ -298,12 +351,25 @@ function loadState() {
     state = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
     state.seq ||= 1;
     state.inbounds ||= [];
-    applyAndRestart();
-    return;
+  } else {
+    const migrated = migrateFromXuiDb();
+    if (!migrated) state = { seq: 1, inbounds: [] };
+    writeState();
   }
-  const migrated = migrateFromXuiDb();
-  if (!migrated) state = { seq: 1, inbounds: [] };
-  writeState();
+
+  if (fs.existsSync(FORWARDS_FILE)) {
+    forwardsState = JSON.parse(fs.readFileSync(FORWARDS_FILE, 'utf8'));
+    forwardsState.seq ||= 1;
+    forwardsState.rules = (forwardsState.rules || []).map(normalizeForwardRule).filter(r => r.id > 0);
+  } else {
+    forwardsState = { seq: 1, rules: [] };
+    writeForwardsState();
+  }
+
+  for (const r of forwardsState.rules) {
+    try { applyForwardRule(r); } catch {}
+  }
+
   applyAndRestart();
 }
 
@@ -381,6 +447,64 @@ app.post('/api/panel/change-password', (req, res) => {
       sessions.set(req.sessionToken, s);
     }
     res.json({ success: true, msg: '密码已更新' });
+  } catch (e) { res.status(500).json({ success: false, msg: e.message }); }
+});
+
+app.get('/api/forwards', (_req, res) => {
+  try {
+    const list = (forwardsState.rules || []).map(refreshForwardStatus);
+    res.json({ success: true, obj: list });
+  } catch (e) { res.status(500).json({ success: false, msg: e.message }); }
+});
+
+app.post('/api/forwards', (req, res) => {
+  try {
+    const listenPort = Number(req.body?.listenPort || 0);
+    const targetHost = String(req.body?.targetHost || '').trim();
+    const targetPort = Number(req.body?.targetPort || 0);
+    const protocol = String(req.body?.protocol || 'tcp').toLowerCase() === 'udp' ? 'udp' : 'tcp';
+    const remark = String(req.body?.remark || '').trim();
+    if (!listenPort || listenPort < 1 || listenPort > 65535) return res.status(400).json({ success: false, msg: '监听端口无效' });
+    if (!targetHost) return res.status(400).json({ success: false, msg: '目标IP不能为空' });
+    if (!targetPort || targetPort < 1 || targetPort > 65535) return res.status(400).json({ success: false, msg: '目标端口无效' });
+    if (forwardsState.rules.some(x => Number(x.listenPort) === listenPort && x.protocol === protocol)) {
+      return res.status(400).json({ success: false, msg: '该协议下监听端口已存在' });
+    }
+    try { shell('command -v socat'); } catch { return res.status(400).json({ success: false, msg: '缺少依赖 socat，请先安装: apt-get install -y socat' }); }
+
+    const rule = normalizeForwardRule({
+      id: forwardsState.seq++, listenPort, targetHost, targetPort, protocol,
+      enabled: true, remark
+    });
+    forwardsState.rules.push(rule);
+    applyForwardRule(rule);
+    writeForwardsState();
+    res.json({ success: true, obj: refreshForwardStatus(rule), msg: '端口转发已创建' });
+  } catch (e) { res.status(500).json({ success: false, msg: e.message }); }
+});
+
+app.post('/api/forwards/:id/toggle', (req, res) => {
+  try {
+    const id = Number(req.params.id || 0);
+    const r = forwardsState.rules.find(x => x.id === id);
+    if (!r) return res.status(404).json({ success: false, msg: 'not found' });
+    r.enabled = !r.enabled;
+    applyForwardRule(r);
+    writeForwardsState();
+    res.json({ success: true, obj: refreshForwardStatus(r) });
+  } catch (e) { res.status(500).json({ success: false, msg: e.message }); }
+});
+
+app.delete('/api/forwards/:id', (req, res) => {
+  try {
+    const id = Number(req.params.id || 0);
+    const idx = forwardsState.rules.findIndex(x => x.id === id);
+    if (idx < 0) return res.status(404).json({ success: false, msg: 'not found' });
+    const r = forwardsState.rules[idx];
+    removeForwardRule(r);
+    forwardsState.rules.splice(idx, 1);
+    writeForwardsState();
+    res.json({ success: true });
   } catch (e) { res.status(500).json({ success: false, msg: e.message }); }
 });
 
