@@ -281,27 +281,72 @@ sysctl --system >/dev/null
 
 while true; do
   echo "===== SUI 菜单 ====="
-  echo "1) 修改面板用户名/密码"
-  echo "2) 修改面板端口"
-  echo "3) 更新 SUI（面板+二进制）"
-  echo "4) 查看状态"
-  echo "5) 启用 BBR + fq"
-  echo "6) DNS 优化"
-  echo "7) 系统网络栈优化"
-  echo "8) 一键应用全部优化(5+6+7)"
-  echo "9) 检查并更新 SUI 菜单"
+  echo "1) 修改面板用户名"
+  echo "2) 修改面板密码"
+  echo "3) 修改面板端口"
+  echo "4) 更新 SUI（面板+二进制）"
+  echo "5) 查看状态（增强）"
+  echo "6) 启用 BBR + fq"
+  echo "7) DNS 优化"
+  echo "8) 系统网络栈优化"
+  echo "9) 一键应用全部优化(6+7+8)"
+  echo "10) 检查并更新 SUI 菜单"
   echo "0) 退出"
   read -r -p "选择: " c
   case "$c" in
-    1) read -r -p "新用户名: " u; read -r -p "新密码: " p; set_kv PANEL_USER "$u"; set_kv PANEL_PASS "$p"; reload_apply; echo "已更新"; read -r -p "回车继续" ;;
-    2) read -r -p "新端口: " pt; set_kv PORT "$pt"; reload_apply; echo "已更新端口为 $pt"; read -r -p "回车继续" ;;
-    3) update_sui_bin; echo "SUI 面板与二进制已更新并重启"; read -r -p "回车继续" ;;
-    4) systemctl --no-pager status "$SERVICE" cui-xray-core.service | sed -n '1,60p'; read -r -p "回车继续" ;;
-    5) opt_bbr; echo "已启用 BBR + fq"; read -r -p "回车继续" ;;
-    6) opt_dns; echo "已应用 DNS 优化"; read -r -p "回车继续" ;;
-    7) opt_sysctl; echo "已应用网络栈优化"; read -r -p "回车继续" ;;
-    8) opt_bbr; opt_dns; opt_sysctl; echo "已应用全部优化"; read -r -p "回车继续" ;;
-    9) self_update_menu; read -r -p "回车继续" ;;
+    1)
+      read -r -p "新用户名: " u
+      [[ -n "${u:-}" ]] || { echo "用户名不能为空"; read -r -p "回车继续"; continue; }
+      set_kv PANEL_USER "$u"
+      reload_apply
+      echo "用户名已更新"
+      read -r -p "回车继续"
+      ;;
+    2)
+      read -r -p "新密码: " p
+      [[ -n "${p:-}" ]] || { echo "密码不能为空"; read -r -p "回车继续"; continue; }
+      set_kv PANEL_PASS "$p"
+      reload_apply
+      echo "密码已更新"
+      read -r -p "回车继续"
+      ;;
+    3)
+      read -r -p "新端口: " pt
+      set_kv PORT "$pt"
+      reload_apply
+      echo "已更新端口为 $pt"
+      read -r -p "回车继续"
+      ;;
+    4)
+      update_sui_bin
+      echo "SUI 面板与二进制已更新并重启"
+      read -r -p "回车继续"
+      ;;
+    5)
+      echo "--- SUI 状态 ---"
+      mode=$(cat /etc/sui-panel.mode 2>/dev/null || echo unknown)
+      echo "安装模式: $mode"
+      echo
+      if [[ "$mode" == "docker" ]] || docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^sui-panel$'; then
+        echo "[Docker 容器]"
+        docker ps --filter name=sui-panel --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' || true
+        echo
+      fi
+      echo "[sui-panel.service]"
+      systemctl --no-pager status "$SERVICE" | sed -n '1,25p' || true
+      echo
+      echo "[cui-xray-core.service]"
+      systemctl --no-pager status cui-xray-core.service | sed -n '1,25p' || true
+      echo
+      echo "[监听端口]"
+      ss -lntp | grep -E ':8810|:443|:80' || true
+      read -r -p "回车继续"
+      ;;
+    6) opt_bbr; echo "已启用 BBR + fq"; read -r -p "回车继续" ;;
+    7) opt_dns; echo "已应用 DNS 优化"; read -r -p "回车继续" ;;
+    8) opt_sysctl; echo "已应用网络栈优化"; read -r -p "回车继续" ;;
+    9) opt_bbr; opt_dns; opt_sysctl; echo "已应用全部优化"; read -r -p "回车继续" ;;
+    10) self_update_menu; read -r -p "回车继续" ;;
     0) exit 0 ;;
   esac
 done
