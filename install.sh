@@ -410,6 +410,8 @@ while true; do
       echo "--- SUI 状态 ---"
       mode=$(cat /etc/sui-panel.mode 2>/dev/null || echo unknown)
       echo "安装模式: $mode"
+      current_port=$(grep -E '^PORT=' "$ENV_FILE" 2>/dev/null | tail -n1 | cut -d= -f2-)
+      echo "当前端口: ${current_port:-8810}"
       if [[ -s /opt/sui-panel/VERSION ]]; then
         echo "版本摘要: $(grep '^commit=' /opt/sui-panel/VERSION | cut -d= -f2 | cut -c1-12)"
       fi
@@ -451,7 +453,14 @@ main(){
   systemctl restart "$SERVICE_NAME" >/dev/null 2>&1 || true
   systemctl restart cui-xray-core.service >/dev/null 2>&1 || true
   write_sui_cli
+
+  # 实际生效端口以 ENV_FILE 为准（保留用户历史配置）
+  local effective_port
+  effective_port=$(grep -E '^PORT=' "$ENV_FILE" 2>/dev/null | tail -n1 | cut -d= -f2-)
+  effective_port=${effective_port:-8810}
+
   log "安装完成 ✅"
-  echo "访问: http://<你的服务器IP>:8810"
+  echo "访问: http://<你的服务器IP>:${effective_port}"
+  echo "提示: 如需修改端口，执行命令: sui -> 3) 修改面板端口"
 }
 main "$@"
