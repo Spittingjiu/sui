@@ -1,95 +1,49 @@
-# SUI Panel
+# SUI Panel 🚀
 
-纯自研的 Xray 管理面板（不依赖 x-ui API），提供 Web 管理、节点增删改查、配置落盘与核心服务联动。
+纯自研 Xray 管理面板（不依赖 x-ui API），主打：好装、好用、可维护。✨
 
-## 功能概览
+## ✨ 功能
 
 - Web 面板登录与会话管理
-- 入站（inbounds）管理
+- 入站（Inbounds）管理
 - 自动生成并维护 Xray 配置
-- 通过 systemd 管理核心服务（`cui-xray-core.service`）
-- 支持二维码生成
+- systemd 服务联动管理（`sui-panel.service` / `cui-xray-core.service`）
+- 节点链接与二维码生成
 
-## 项目结构
-
-- `server.mjs`：后端主程序（Express）
-- `public/`：前端静态资源
-- `dist/`：发布产物（含全功能二进制）
-- `install.sh`：一键安装脚本
-
-## 运行要求
-
-- Linux（建议 Debian/Ubuntu）
-- Node.js 18+
-- root 权限（需要写入 `/etc`、`/opt` 并管理 systemd）
-- systemd
-
-## 本地开发运行
-
-```bash
-npm install
-node server.mjs
-```
-
-默认端口：`8810`
-
-可用环境变量：
-
-- `PORT`：面板监听端口（默认 `8810`）
-- `PANEL_TOKEN`：面板 token（默认随机生成）
-- `PANEL_USER`：初始用户名（默认 `admin`）
-- `PANEL_PASS`：初始密码（默认 `admin123`）
-- `PANEL_PATH`：面板路径（默认 `/`）
-- `XRAY_PUBLIC_HOST`：对外主机名
-- `PANEL_SERVICE`：面板服务名（默认 `sui-panel.service`）
-
-## 生产部署（推荐）
-
-### 一键安装（GitHub）
+## ⚡ 一键安装（推荐）
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/Spittingjiu/sui/main/install.sh)
 ```
 
-说明：安装器已固定为二进制模式（不再提供 Docker 模式）。
+> 安装器已固定为二进制模式（不再走 Docker 安装流程）。
 
-### 本地安装（仓库内）
-
-```bash
-bash install.sh
-```
-
-### Docker 安装（单行命令）
+## 🧭 安装后常用命令
 
 ```bash
-docker run -d --name sui-panel --restart always \
-  -p 8810:8810 \
-  -e PORT=8810 \
-  -e PANEL_USER=admin \
-  -e PANEL_PASS=admin123 \
-  -e PANEL_TOKEN=sui2026 \
-  -e XRAY_PUBLIC_HOST= \
-  -v /opt/sui-panel:/opt/sui-panel \
-  --privileged \
-  node:20-bookworm \
-  bash -lc 'set -e; apt-get update -y && apt-get install -y curl ca-certificates unzip; mkdir -p /opt/sui-panel; curl -fsSL -o /opt/sui-panel/sui-panel-bin https://cui.wuhai.eu.org/sui-panel-full-linux-amd64; chmod +x /opt/sui-panel/sui-panel-bin; exec /opt/sui-panel/sui-panel-bin'
+sui
 ```
 
-安装后可配合 Nginx 做反向代理，并启用 HTTPS。
+在菜单里可直接：
+- 修改用户名/密码
+- 修改端口
+- 更新 SUI
+- 查看服务状态与版本
 
-## 数据与配置路径
+## 🗂️ 关键路径
 
-- 面板数据目录：`/opt/cui-panel`
-- 入站数据：`/opt/cui-panel/inbounds.json`
+- 面板程序：`/opt/sui-panel`
+- 环境变量：`/etc/default/sui-panel`
+- 面板数据：`/opt/cui-panel/inbounds.json`
 - 面板设置：`/opt/cui-panel/panel-settings.json`
 - Xray 配置：`/etc/cui-xray/config.json`
 
-## 注意事项
+## 🔐 注意事项
 
-- 首次部署请及时修改默认账号密码
-- 生产环境建议开启防火墙并限制管理面板访问来源
-- 对外发布前请确认端口与证书配置正确
+- 首次部署后请立即修改默认账号密码
+- 生产环境建议限制面板访问来源（防火墙/安全组）
+- 更新后若页面异常，先强刷浏览器缓存（Ctrl+F5）
 
-## License
+---
 
-暂未指定（默认保留所有权利）。
+Made with 🛠️ by Claw
