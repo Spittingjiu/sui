@@ -254,33 +254,14 @@ self_update_menu(){
 }
 
 update_sui_bin(){
-  self_update_menu >/dev/null 2>&1 || true
-  local work
-  work=$(mktemp -d)
-  mkdir -p /opt/sui-panel/public
-
-  systemctl stop "$SERVICE" >/dev/null 2>&1 || true
-  pkill -f '/opt/sui-panel/sui-panel-bin' >/dev/null 2>&1 || true
-  sleep 0.3
-
-  curl -fL --retry 3 -o "$work/sui-panel-bin" "$BIN_URL"
-  [[ -f "$BIN_PATH" ]] && mv -f "$BIN_PATH" "${BIN_PATH}.old.$(date +%s)" 2>/dev/null || true
-  install -m 0755 "$work/sui-panel-bin" "$BIN_PATH"
-
-  if ! curl -fL --retry 3 -o /opt/sui-panel/server.mjs "$SERVER_URL"; then
-    echo "GitHub server.mjs 拉取失败，回退到历史包源"
-    curl -fL --retry 3 -o "$work/panel.tar.gz" "$PANEL_TAR_URL"
-    tar -xzf "$work/panel.tar.gz" -C "$work"
-    [ -f "$work/sui-panel/server.mjs" ] && cp -f "$work/sui-panel/server.mjs" /opt/sui-panel/server.mjs
-    [ -f "$work/sui-panel/public/index.html" ] && cp -f "$work/sui-panel/public/index.html" /opt/sui-panel/public/index.html
-  else
-    curl -fL --retry 3 -o /opt/sui-panel/public/index.html "$PANEL_INDEX_URL?t=$(date +%s)" || echo "GitHub index.html 拉取失败，保留现有前端"
-  fi
-
-  write_version_meta update
-  install -m 0755 /usr/local/bin/sui /opt/sui-panel/sui-menu.sh 2>/dev/null || true
-  rm -rf "$work"
-  systemctl restart "$SERVICE"
+  # 统一走“最新安装脚本重装”路径，确保与手工重装效果一致
+  local tmp_inst
+  tmp_inst=$(mktemp)
+  echo "正在拉取最新安装脚本..."
+  curl -fL --retry 3 -o "$tmp_inst" "$INSTALL_URL?t=$(date +%s)"
+  echo "开始执行重装（会保留你现有配置，按提示选 Y）..."
+  bash "$tmp_inst"
+  rm -f "$tmp_inst"
 }
 
 opt_bbr(){
