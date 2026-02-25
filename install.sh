@@ -195,9 +195,12 @@ setup_binary_mode(){
   sleep 0.3
 
   log "下载二进制与面板文件..."
-  local tmp_bin
+  local tmp_bin old_bin
   tmp_bin=$(mktemp)
+  old_bin="$APP_DIR/sui-panel-bin.old.$(date +%s)"
   curl -fL --retry 3 -o "$tmp_bin" "$BIN_URL"
+  # 若旧二进制仍被占用，先改名再替换，避免 Text file busy
+  [[ -f "$APP_DIR/sui-panel-bin" ]] && mv -f "$APP_DIR/sui-panel-bin" "$old_bin" 2>/dev/null || true
   install -m 0755 "$tmp_bin" "$APP_DIR/sui-panel-bin"
   rm -f "$tmp_bin"
 
@@ -326,6 +329,7 @@ update_sui_bin(){
 
   # 二进制与代码优先从 GitHub 拉最新
   curl -fL --retry 3 -o "$work/sui-panel-bin" "$BIN_URL"
+  [[ -f "$BIN_PATH" ]] && mv -f "$BIN_PATH" "${BIN_PATH}.old.$(date +%s)" 2>/dev/null || true
   install -m 0755 "$work/sui-panel-bin" "$BIN_PATH"
 
   if ! curl -fL --retry 3 -o /opt/sui-panel/server.mjs "$SERVER_URL"; then
