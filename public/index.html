@@ -147,10 +147,10 @@ const setUser=$('set_user'), setPath=$('set_path'), setOldPass=$('set_old_pass')
 
 function hdr(){const t=localStorage.sessionToken||'';return t?{'Authorization':'Bearer '+t}:{}};
 function panelBasePath(){const p=location.pathname||'/';if(p==='/'||p==='')return '';if(p.endsWith('/'))return p.slice(0,-1);if(/\.html?$/.test(p))return p.replace(/\/[^/]+$/,'');return p;}
-async function api(u,o={}){const parse=async(url)=>{const r=await fetch(url,{...o,headers:{'content-type':'application/json',...hdr(),...(o.headers||{})}});const txt=await r.text();let j={};try{j=txt?JSON.parse(txt):{};}catch{j={success:false,msg:'non-json response: '+(txt||'').slice(0,120)};}if(j.success===undefined)j.success=r.ok;return j;};try{const base=panelBasePath();const tries=[u];if(base&&u.startsWith('/api/')&&!u.startsWith(base+'/'))tries.unshift(base+u);let out={success:false,msg:'uninitialized'};for(const t of tries){out=await parse(t);if(out.success||!String(out.msg||'').startsWith('non-json response'))break;}return out;}catch(e){return{success:false,msg:e?.message||'network error'}}}
+async function api(u,o={}){const parse=async(url)=>{const r=await fetch(url,{...o,headers:{'content-type':'application/json',...hdr(),...(o.headers||{})}});const txt=await r.text();let j={};try{j=txt?JSON.parse(txt):{};}catch{j={success:false,msg:'non-json response: '+(txt||'').slice(0,120)};}if(j.success===undefined)j.success=r.ok;return j;};try{const base=panelBasePath();const tries=[u];if(base&&(u.startsWith('/api/')||u.startsWith('/auth/'))&&!u.startsWith(base+'/'))tries.unshift(base+u);let out={success:false,msg:'uninitialized'};for(const t of tries){out=await parse(t);if(out.success||!String(out.msg||'').startsWith('non-json response'))break;}return out;}catch(e){return{success:false,msg:e?.message||'network error'}}}
 
 async function doLogin(){
-  const r=await fetch('/auth/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({username:lu.value,password:lp.value})}).then(x=>x.json()).catch(()=>({success:false,msg:'登录失败'}));
+  const r=await api('/auth/login',{method:'POST',body:JSON.stringify({username:lu.value,password:lp.value})});
   if(!r.success){le.textContent=r.msg||'登录失败';return;}
   localStorage.sessionToken=r.token;forceReset=!!r.mustReset;login.style.display='none';app.style.display='block';init();
   if(forceReset){switchTab('settings');forceResetTip.style.display='block';alert('首次登录必须先修改密码');}
@@ -188,7 +188,7 @@ async function loadCur(){const r=await api('/api/system/xray/version-current');i
 async function loadStatus(){const r=await api('/api/system/status');if(!r.success){sp.textContent='Panel:err';sx.textContent='Xray:err';si.textContent='Inbounds:err';sp.title=sx.title=si.title=(r.msg||'status failed');return;}const o=r.obj||{};const ok=v=>v==='active';sp.textContent='Panel:'+((o.panel?.active)||'-');sp.className='badge '+(ok(o.panel?.active)?'status-ok':'status-bad');sx.textContent='Xray:'+((o.xray?.active)||'-')+(o.xrayVersion?(' · '+o.xrayVersion):'');sx.className='badge '+(ok(o.xray?.active)?'status-ok':'status-bad');si.textContent='Inbounds:'+(o.inboundsEnabled??'-')+'/'+(o.inboundsTotal??'-')}
 
 async function init(){q.oninput=render;f_protocol.onchange=tune;f_network.onchange=tune;f_security.onchange=tune;switchTab('main');await loadPanelSettings();await loadCur();await loadStatus();if(!forceReset)await loadData();setInterval(loadStatus,10000)}
-(async()=>{if(localStorage.sessionToken){const me=await fetch('/auth/me',{headers:hdr()}).then(r=>r.json()).catch(()=>({success:false}));if(me.success){forceReset=!!me.mustReset;login.style.display='none';app.style.display='block';init();if(forceReset){switchTab('settings');forceResetTip.style.display='block';}return;}localStorage.removeItem('sessionToken');}login.style.display='block';app.style.display='none';})();
+(async()=>{if(localStorage.sessionToken){const me=await api('/auth/me');if(me.success){forceReset=!!me.mustReset;login.style.display='none';app.style.display='block';init();if(forceReset){switchTab('settings');forceResetTip.style.display='block';}return;}localStorage.removeItem('sessionToken');}login.style.display='block';app.style.display='none';})();
 </script>
 </body>
 </html>
