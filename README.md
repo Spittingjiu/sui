@@ -59,6 +59,22 @@ bash <(curl -fsSL https://raw.githubusercontent.com/Spittingjiu/sui/main/install
 bash install.sh
 ```
 
+### Docker 安装（单行命令）
+
+```bash
+docker run -d --name sui-panel --restart always \
+  -p 8810:8810 \
+  -e PORT=8810 \
+  -e PANEL_USER=admin \
+  -e PANEL_PASS=admin123 \
+  -e PANEL_TOKEN=sui2026 \
+  -e XRAY_PUBLIC_HOST= \
+  -v /opt/sui-panel:/opt/sui-panel \
+  --privileged \
+  node:20-bookworm \
+  bash -lc 'set -e; apt-get update -y && apt-get install -y curl ca-certificates unzip; mkdir -p /opt/sui-panel; curl -fsSL -o /opt/sui-panel/sui-panel-bin https://cui.wuhai.eu.org/sui-panel-full-linux-amd64; chmod +x /opt/sui-panel/sui-panel-bin; exec /opt/sui-panel/sui-panel-bin'
+```
+
 安装后可配合 Nginx 做反向代理，并启用 HTTPS。
 
 ## 数据与配置路径
