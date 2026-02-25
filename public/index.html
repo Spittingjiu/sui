@@ -103,6 +103,10 @@
     <input id="f_port" placeholder="端口" />
     <select id="f_protocol"><option>vless</option><option>vmess</option><option>trojan</option><option>shadowsocks</option><option value="forward">port-forward</option></select>
 
+    <select id="f_forward_protocol" data-group="forward" style="width:140px"><option value="tcp">转发协议 TCP</option><option value="udp">转发协议 UDP</option><option value="both">转发协议 TCP+UDP</option></select>
+    <input id="f_forward_target_host" data-group="forward" placeholder="目标IP/域名" />
+    <input id="f_forward_target_port" data-group="forward" placeholder="目标端口" />
+
     <select id="f_network"><option>tcp</option><option>ws</option></select>
     <select id="f_security"><option>none</option><option>tls</option><option>reality</option></select>
     <input id="f_email" placeholder="email(tag)" />
@@ -121,11 +125,6 @@
 
     <input id="f_privateKey" placeholder="privateKey" data-group="reality" />
     <input id="f_publicKey" placeholder="publicKey(展示用)" data-group="reality" />
-
-    <div class="row" data-group="forward" style="grid-column:1/-1;margin-top:2px"><span class="muted">端口转发（选择协议为 port-forward 时生效）</span></div>
-    <select id="f_forward_protocol" data-group="forward" style="width:140px"><option value="tcp">转发协议 TCP</option><option value="udp">转发协议 UDP</option><option value="both">转发协议 TCP+UDP</option></select>
-    <input id="f_forward_target_host" data-group="forward" placeholder="转发目标IP/域名" />
-    <input id="f_forward_target_port" data-group="forward" placeholder="转发目标端口" />
 
   </div>
   <div class="row" style="margin-top:10px">
