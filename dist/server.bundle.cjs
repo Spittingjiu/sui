@@ -27500,18 +27500,38 @@ function loadState() {
   loadPanelSettings();
   ensureCoreService();
   if (import_node_fs.default.existsSync(DATA_FILE)) {
-    state = JSON.parse(import_node_fs.default.readFileSync(DATA_FILE, "utf8"));
-    state.seq ||= 1;
-    state.inbounds ||= [];
+    try {
+      state = JSON.parse(import_node_fs.default.readFileSync(DATA_FILE, "utf8"));
+      state.seq ||= 1;
+      state.inbounds ||= [];
+    } catch {
+      const bad = `${DATA_FILE}.bad.${Date.now()}`;
+      try {
+        import_node_fs.default.renameSync(DATA_FILE, bad);
+      } catch {
+      }
+      state = { seq: 1, inbounds: [] };
+      writeState();
+    }
   } else {
     const migrated = migrateFromXuiDb();
     if (!migrated) state = { seq: 1, inbounds: [] };
     writeState();
   }
   if (import_node_fs.default.existsSync(FORWARDS_FILE)) {
-    forwardsState = JSON.parse(import_node_fs.default.readFileSync(FORWARDS_FILE, "utf8"));
-    forwardsState.seq ||= 1;
-    forwardsState.rules = (forwardsState.rules || []).map(normalizeForwardRule).filter((r) => r.id > 0);
+    try {
+      forwardsState = JSON.parse(import_node_fs.default.readFileSync(FORWARDS_FILE, "utf8"));
+      forwardsState.seq ||= 1;
+      forwardsState.rules = (forwardsState.rules || []).map(normalizeForwardRule).filter((r) => r.id > 0);
+    } catch {
+      const bad = `${FORWARDS_FILE}.bad.${Date.now()}`;
+      try {
+        import_node_fs.default.renameSync(FORWARDS_FILE, bad);
+      } catch {
+      }
+      forwardsState = { seq: 1, rules: [] };
+      writeForwardsState();
+    }
   } else {
     forwardsState = { seq: 1, rules: [] };
     writeForwardsState();
@@ -27522,7 +27542,21 @@ function loadState() {
     } catch {
     }
   }
-  applyAndRestart();
+  try {
+    applyAndRestart();
+  } catch {
+    const bad = `${DATA_FILE}.invalid.${Date.now()}`;
+    try {
+      import_node_fs.default.renameSync(DATA_FILE, bad);
+    } catch {
+    }
+    state = { seq: 1, inbounds: [] };
+    writeState();
+    try {
+      applyAndRestart();
+    } catch {
+    }
+  }
 }
 function auth(req, res, next) {
   if (req.headers["x-panel-token"] === PANEL_TOKEN) return next();
