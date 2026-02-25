@@ -175,7 +175,8 @@ function writeForwardsState() {
 }
 
 function normalizeForwardRule(x = {}) {
-  const protocol = String(x.protocol || 'tcp').toLowerCase() === 'udp' ? 'udp' : 'tcp';
+  const p = String(x.protocol || 'tcp').toLowerCase();
+  const protocol = (p === 'udp' || p === 'both') ? p : 'tcp';
   return {
     id: Number(x.id || 0),
     listenPort: Number(x.listenPort || 0),
@@ -190,9 +191,14 @@ function normalizeForwardRule(x = {}) {
 function unitNameByRule(rule) { return `sui-forward-${rule.id}.service`; }
 
 function renderForwardUnit(rule) {
-  const relay = rule.protocol === 'udp'
-    ? `/usr/bin/socat -d -d UDP-RECVFROM:${rule.listenPort},fork,reuseaddr UDP-SENDTO:${rule.targetHost}:${rule.targetPort}`
-    : `/usr/bin/socat -d -d TCP-LISTEN:${rule.listenPort},fork,reuseaddr TCP:${rule.targetHost}:${rule.targetPort}`;
+  let relay = '';
+  if (rule.protocol === 'udp') {
+    relay = `/usr/bin/socat -d -d UDP-RECVFROM:${rule.listenPort},fork,reuseaddr UDP-SENDTO:${rule.targetHost}:${rule.targetPort}`;
+  } else if (rule.protocol === 'both') {
+    relay = `/bin/bash -lc '/usr/bin/socat -d -d TCP-LISTEN:${rule.listenPort},fork,reuseaddr TCP:${rule.targetHost}:${rule.targetPort} & /usr/bin/socat -d -d UDP-RECVFROM:${rule.listenPort},fork,reuseaddr UDP-SENDTO:${rule.targetHost}:${rule.targetPort} & wait -n'`;
+  } else {
+    relay = `/usr/bin/socat -d -d TCP-LISTEN:${rule.listenPort},fork,reuseaddr TCP:${rule.targetHost}:${rule.targetPort}`;
+  }
   return `[Unit]\nDescription=SUI Port Forward #${rule.id} (${rule.protocol.toUpperCase()} ${rule.listenPort} -> ${rule.targetHost}:${rule.targetPort})\nAfter=network.target\n\n[Service]\nType=simple\nExecStart=${relay}\nRestart=always\nRestartSec=1\nUser=root\n\n[Install]\nWantedBy=multi-user.target\n`;
 }
 
@@ -484,13 +490,20 @@ app.post('/api/forwards', (req, res) => {
     const listenPort = Number(req.body?.listenPort || 0);
     const targetHost = String(req.body?.targetHost || '').trim();
     const targetPort = Number(req.body?.targetPort || 0);
-    const protocol = String(req.body?.protocol || 'tcp').toLowerCase() === 'udp' ? 'udp' : 'tcp';
+    const p = String(req.body?.protocol || 'tcp').toLowerCase();
+    const protocol = (p === 'udp' || p === 'both') ? p : 'tcp';
     const remark = String(req.body?.remark || '').trim();
     if (!listenPort || listenPort < 1 || listenPort > 65535) return res.status(400).json({ success: false, msg: '监听端口无效' });
     if (!targetHost) return res.status(400).json({ success: false, msg: '目标IP不能为空' });
     if (!targetPort || targetPort < 1 || targetPort > 65535) return res.status(400).json({ success: false, msg: '目标端口无效' });
-    if (forwardsState.rules.some(x => Number(x.listenPort) === listenPort && x.protocol === protocol)) {
-      return res.status(400).json({ success: false, msg: '该协议下监听端口已存在' });
+
+    const overlap = (a, b) => {
+      const A = a === 'both' ? ['tcp', 'udp'] : [a];
+      const B = b === 'both' ? ['tcp', 'udp'] : [b];
+      return A.some(x => B.includes(x));
+    };
+    if (forwardsState.rules.some(x => Number(x.listenPort) === listenPort && overlap(String(x.protocol || 'tcp'), protocol))) {
+      return res.status(400).json({ success: false, msg: '监听端口与现有转发协议冲突' });
     }
     try { shell('command -v socat'); } catch { return res.status(400).json({ success: false, msg: '缺少依赖 socat，请先安装: apt-get install -y socat' }); }
 

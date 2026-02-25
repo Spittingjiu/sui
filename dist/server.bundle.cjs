@@ -27303,7 +27303,8 @@ function writeForwardsState() {
   import_node_fs.default.writeFileSync(FORWARDS_FILE, JSON.stringify(forwardsState, null, 2));
 }
 function normalizeForwardRule(x = {}) {
-  const protocol = String(x.protocol || "tcp").toLowerCase() === "udp" ? "udp" : "tcp";
+  const p = String(x.protocol || "tcp").toLowerCase();
+  const protocol = p === "udp" || p === "both" ? p : "tcp";
   return {
     id: Number(x.id || 0),
     listenPort: Number(x.listenPort || 0),
@@ -27318,7 +27319,14 @@ function unitNameByRule(rule) {
   return `sui-forward-${rule.id}.service`;
 }
 function renderForwardUnit(rule) {
-  const relay = rule.protocol === "udp" ? `/usr/bin/socat -d -d UDP-RECVFROM:${rule.listenPort},fork,reuseaddr UDP-SENDTO:${rule.targetHost}:${rule.targetPort}` : `/usr/bin/socat -d -d TCP-LISTEN:${rule.listenPort},fork,reuseaddr TCP:${rule.targetHost}:${rule.targetPort}`;
+  let relay = "";
+  if (rule.protocol === "udp") {
+    relay = `/usr/bin/socat -d -d UDP-RECVFROM:${rule.listenPort},fork,reuseaddr UDP-SENDTO:${rule.targetHost}:${rule.targetPort}`;
+  } else if (rule.protocol === "both") {
+    relay = `/bin/bash -lc '/usr/bin/socat -d -d TCP-LISTEN:${rule.listenPort},fork,reuseaddr TCP:${rule.targetHost}:${rule.targetPort} & /usr/bin/socat -d -d UDP-RECVFROM:${rule.listenPort},fork,reuseaddr UDP-SENDTO:${rule.targetHost}:${rule.targetPort} & wait -n'`;
+  } else {
+    relay = `/usr/bin/socat -d -d TCP-LISTEN:${rule.listenPort},fork,reuseaddr TCP:${rule.targetHost}:${rule.targetPort}`;
+  }
   return `[Unit]
 Description=SUI Port Forward #${rule.id} (${rule.protocol.toUpperCase()} ${rule.listenPort} -> ${rule.targetHost}:${rule.targetPort})
 After=network.target
@@ -27644,13 +27652,19 @@ app.post("/api/forwards", (req, res) => {
     const listenPort = Number(req.body?.listenPort || 0);
     const targetHost = String(req.body?.targetHost || "").trim();
     const targetPort = Number(req.body?.targetPort || 0);
-    const protocol = String(req.body?.protocol || "tcp").toLowerCase() === "udp" ? "udp" : "tcp";
+    const p = String(req.body?.protocol || "tcp").toLowerCase();
+    const protocol = p === "udp" || p === "both" ? p : "tcp";
     const remark = String(req.body?.remark || "").trim();
     if (!listenPort || listenPort < 1 || listenPort > 65535) return res.status(400).json({ success: false, msg: "\u76D1\u542C\u7AEF\u53E3\u65E0\u6548" });
     if (!targetHost) return res.status(400).json({ success: false, msg: "\u76EE\u6807IP\u4E0D\u80FD\u4E3A\u7A7A" });
     if (!targetPort || targetPort < 1 || targetPort > 65535) return res.status(400).json({ success: false, msg: "\u76EE\u6807\u7AEF\u53E3\u65E0\u6548" });
-    if (forwardsState.rules.some((x) => Number(x.listenPort) === listenPort && x.protocol === protocol)) {
-      return res.status(400).json({ success: false, msg: "\u8BE5\u534F\u8BAE\u4E0B\u76D1\u542C\u7AEF\u53E3\u5DF2\u5B58\u5728" });
+    const overlap = (a, b) => {
+      const A = a === "both" ? ["tcp", "udp"] : [a];
+      const B = b === "both" ? ["tcp", "udp"] : [b];
+      return A.some((x) => B.includes(x));
+    };
+    if (forwardsState.rules.some((x) => Number(x.listenPort) === listenPort && overlap(String(x.protocol || "tcp"), protocol))) {
+      return res.status(400).json({ success: false, msg: "\u76D1\u542C\u7AEF\u53E3\u4E0E\u73B0\u6709\u8F6C\u53D1\u534F\u8BAE\u51B2\u7A81" });
     }
     try {
       shell("command -v socat");
