@@ -25,37 +25,40 @@ preflight(){
 }
 choose_mode(){
   local m
+  local tty="/dev/tty"
 
   # 非交互环境（如 CI/管道）默认走 1，避免卡住
   if [[ -n "${SUI_MODE:-}" ]]; then
     m="${SUI_MODE}"
     [[ "$m" == "1" || "$m" == "2" ]] || { err "SUI_MODE 仅支持 1 或 2"; exit 1; }
-    log "检测到 SUI_MODE=${m}，按指定模式安装"
+    log "检测到 SUI_MODE=${m}，按指定模式安装" >&2
     echo "$m"; return
   fi
 
-  if [[ ! -e /dev/tty ]]; then
-    warn "未检测到交互终端，默认使用模式 1（Docker）"
+  if [[ ! -e "$tty" ]]; then
+    warn "未检测到交互终端，默认使用模式 1（Docker）" >&2
     echo "1"; return
   fi
 
   while true; do
-    clear || true
-    echo "========================================"
-    echo "SUI Panel 安装模式选择"
-    echo "----------------------------------------"
-    echo "1) Docker 一键版（推荐）"
-    echo "   - 自动装 Docker 并启动容器"
-    echo "   - 占用更稳，升级回滚方便"
-    echo
-    echo "2) 全功能二进制版（推荐小内存）"
-    echo "   - 与线上 SUI 面板同功能"
-    echo "   - 直接下载预编译二进制（不安装 Go/Node）"
-    echo "========================================"
-    read -r -p "请选择安装模式 [1/2，默认1]: " m < /dev/tty || true
+    clear > "$tty" 2>/dev/null || true
+    {
+      echo "========================================"
+      echo "SUI Panel 安装模式选择"
+      echo "----------------------------------------"
+      echo "1) Docker 一键版（推荐）"
+      echo "   - 自动装 Docker 并启动容器"
+      echo "   - 占用更稳，升级回滚方便"
+      echo
+      echo "2) 全功能二进制版（推荐小内存）"
+      echo "   - 与线上 SUI 面板同功能"
+      echo "   - 直接下载预编译二进制（不安装 Go/Node）"
+      echo "========================================"
+    } > "$tty"
+    read -r -p "请选择安装模式 [1/2，默认1]: " m < "$tty" || true
     m="${m:-1}"
     [[ "$m" == "1" || "$m" == "2" ]] && { echo "$m"; return; }
-    warn "输入无效，请输入 1 或 2"
+    warn "输入无效，请输入 1 或 2" > "$tty"
     sleep 1
   done
 }
