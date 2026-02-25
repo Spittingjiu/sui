@@ -311,8 +311,9 @@ chmod +x /usr/local/bin/sui
 
 main(){
   require_root; preflight; backup_existing_state; apt_base; install_xray_if_needed; write_env
-  mode=$(choose_mode)
-  if [[ "$mode" == "1" ]]; then setup_docker_mode; echo docker > /etc/sui-panel.mode; else setup_binary_mode; echo binary > /etc/sui-panel.mode; fi
+  log "已固定为二进制安装模式（不再使用 Docker）"
+  setup_binary_mode
+  echo binary > /etc/sui-panel.mode
   restore_existing_state
   systemctl restart "$SERVICE_NAME" >/dev/null 2>&1 || true
   systemctl restart cui-xray-core.service >/dev/null 2>&1 || true

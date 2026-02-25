@@ -51,12 +51,7 @@ node server.mjs
 bash <(curl -fsSL https://raw.githubusercontent.com/Spittingjiu/sui/main/install.sh)
 ```
 
-可选：指定安装模式（避免交互）
-
-```bash
-SUI_MODE=1 bash <(curl -fsSL https://raw.githubusercontent.com/Spittingjiu/sui/main/install.sh)   # Docker
-SUI_MODE=2 bash <(curl -fsSL https://raw.githubusercontent.com/Spittingjiu/sui/main/install.sh)   # 二进制
-```
+说明：安装器已固定为二进制模式（不再提供 Docker 模式）。
 
 ### 本地安装（仓库内）
 
