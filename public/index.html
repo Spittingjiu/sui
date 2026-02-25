@@ -1,0 +1,115 @@
+<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>SUI Xray Panel</title><style>
+:root{--bg1:#0b1020;--bg2:#1a1040;--neon1:#7c4dff;--neon2:#00e5ff;--pink:#ff4dd2;--glass:rgba(18,26,49,.55)}
+*{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui;color:#e9efff;background:
+radial-gradient(1000px 420px at -10% -20%,#4c2cff66,transparent 70%),
+radial-gradient(900px 380px at 110% 10%,#00e5ff44,transparent 70%),
+linear-gradient(135deg,var(--bg1),var(--bg2));background-attachment:fixed}
+.wrap{max-width:1180px;margin:auto;padding:18px}
+.card{background:linear-gradient(135deg,rgba(255,255,255,.08),rgba(255,255,255,.02));backdrop-filter:blur(10px);border:1px solid #6f85ff55;box-shadow:0 8px 28px #0006, inset 0 0 40px #ffffff08;border-radius:18px;padding:14px;margin:12px 0}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+input,button,select,textarea{background:#0f1733cc;color:#fff;border:1px solid #5f79d8;border-radius:12px;padding:9px 11px;transition:.2s}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--neon2);box-shadow:0 0 0 3px #00e5ff33}
+button{background:linear-gradient(90deg,#496dff,#7c4dff);border:0;cursor:pointer;box-shadow:0 4px 16px #5b4dff66}
+button:hover{transform:translateY(-1px);filter:brightness(1.08)}
+.danger{background:linear-gradient(90deg,#ff4d7a,#ff4dd2)}
+.m{position:fixed;inset:0;background:#060a18cc;display:none;align-items:center;justify-content:center;backdrop-filter:blur(4px)}.m.show{display:flex}
+.box{width:min(980px,95vw);max-height:90vh;overflow:auto;background:linear-gradient(145deg,#121b37ee,#1a1f4bee);border:1px solid #7b8eff66;border-radius:18px;padding:16px;box-shadow:0 20px 60px #0009}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+#cv{padding:6px 10px;border-radius:999px;border:1px solid #8f9dff66;background:#111a38}
+h2{margin:0 0 8px;text-shadow:0 0 18px #7c4dff88}
+@media(max-width:820px){.grid{grid-template-columns:1fr}}
+</style></head><body>
+<div id='login' class='wrap'><div class='card' style='max-width:420px;margin:10vh auto'><h2>✨ SUI Portal</h2><div style='opacity:.86;margin-bottom:10px'>Cyber Xray 管理面板</div><input id='lu' placeholder='用户名'><input id='lp' type='password' placeholder='密码' style='margin-top:8px'><button style='width:100%;margin-top:10px' onclick='doLogin()'>登录</button><div id='le' style='color:#ff9cb0;margin-top:8px'></div></div></div>
+<div id='app' class='wrap' style='display:none'>
+  <div class='card row'>
+    <b>SUI Xray Panel</b>
+    <button id='tabMainBtn' onclick='switchTab("main")'>节点管理</button>
+    <button id='tabSettingsBtn' onclick='switchTab("settings")'>面板设置</button>
+    <button class='danger' onclick='logout()'>退出</button>
+  </div>
+
+  <div id='tab-main'>
+    <div class='card row'><input id='q' placeholder='搜索'><button onclick='loadData()'>刷新</button><button onclick='openAdd()'>新增节点</button><button onclick='quickReality()'>一键Reality节点</button><span id='cv'>当前Xray:-</span><select id='ver'></select><button onclick='switchVer()'>切换Xray版本</button><button onclick='restartXui()'>重启Xray</button></div>
+    <div class='card row'><b>服务状态</b><span id='sp' style='padding:2px 8px;border-radius:999px;border:1px solid #6f85ff66'>Panel:-</span><span id='sx' style='padding:2px 8px;border-radius:999px;border:1px solid #6f85ff66'>Xray:-</span><span id='si' style='padding:2px 8px;border-radius:999px;border:1px solid #6f85ff66'>Inbounds:-</span></div>
+    <div id='list'></div>
+  </div>
+
+  <div id='tab-settings' style='display:none'>
+    <div class='card'>
+      <h3 style='margin:0 0 10px'>账号与密码</h3>
+      <div class='grid'>
+        <input id='set_user' placeholder='用户名'>
+        <input id='set_old_pass' type='password' placeholder='旧密码（首次可留空）'>
+        <input id='set_new_pass' type='password' placeholder='新密码（至少6位）'>
+      </div>
+      <div class='row' style='margin-top:10px'>
+        <button onclick='savePanelUsername()'>保存用户名</button>
+        <button onclick='changePanelPassword()'>更新密码</button>
+      </div>
+      <div id='forceResetTip' style='display:none;color:#ff9cb0;margin-top:8px'>首次登录必须先修改密码。</div>
+    </div>
+    <div class='card'>
+      <h3 style='margin:0 0 10px'>面板路径</h3>
+      <div class='grid'>
+        <input id='set_path' placeholder='面板路径，例如 /panel'>
+        <button onclick='savePanelPath()'>保存路径</button>
+      </div>
+      <div style='opacity:.8;margin-top:8px'>路径修改后，重启 SUI 服务生效。</div>
+    </div>
+  </div>
+</div>
+<div id='modal' class='m'><div class='box'><div class='row'><b id='mt'>新增/编辑节点</b><button onclick='closeM()'>关闭</button></div><div class='grid'>
+<input id='f_remark' placeholder='备注'><input id='f_port' placeholder='端口'><select id='f_protocol'><option>vless</option><option>vmess</option><option>trojan</option><option>shadowsocks</option></select>
+<select id='f_network'><option>tcp</option><option>ws</option></select><select id='f_security'><option>none</option><option>tls</option><option>reality</option></select><input id='f_email' placeholder='email(可空)'>
+<input id='f_uuid' data-group='uuid' placeholder='uuid(可空)'><button data-group='uuid' onclick='genUUID()'>生成UUID</button><input id='f_password' data-group='password' placeholder='password'>
+<select id='f_method' data-group='method'><option>aes-128-gcm</option><option>aes-256-gcm</option><option>chacha20-ietf-poly1305</option></select><select id='f_flow' data-group='flow'><option value=''>flow(空)</option><option value='xtls-rprx-vision'>xtls-rprx-vision</option></select><input id='f_path' data-group='ws' placeholder='ws path'>
+<input id='f_host' data-group='ws' placeholder='ws host'><input id='f_sni' data-group='tls' placeholder='sni'><button data-group='tls' onclick='randSni()'>随机SNI</button>
+<input id='f_realityDest' data-group='reality' placeholder='reality dest'><input id='f_shortId' data-group='reality' placeholder='reality shortId'><input id='f_privateKey' data-group='reality' placeholder='reality privateKey'>
+<input id='f_publicKey' data-group='reality' placeholder='reality publicKey' readonly><button data-group='reality' onclick='genReality()'>生成Reality密钥</button>
+</div><div class='row' style='margin-top:10px'><button onclick='applyNodeSpeedPreset()'>套用极速推荐(Reality+Vision)</button><button onclick='submitAdd()'>保存</button></div></div></div>
+<div id='qrModal' class='m'><div class='box'><div class='row'><b>导入二维码</b><button onclick='qrModal.classList.remove("show")'>关闭</button></div><img id='qrImg' style='max-width:320px;width:100%;background:#fff;padding:8px;border-radius:8px'><textarea id='qrLink' style='width:100%;min-height:72px'></textarea><button onclick='navigator.clipboard.writeText(qrLink.value)'>复制链接</button></div></div>
+<script>
+const $=id=>document.getElementById(id);let all=[],editId=null,forceReset=false;const sniPool=['www.cloudflare.com','www.microsoft.com','www.apple.com','www.bing.com','www.amazon.com','www.cloudflare-dns.com','www.yahoo.com','www.nasa.gov','www.ibm.com','www.oracle.com'];
+const q=$('q'), list=$('list'), cv=$('cv'), ver=$('ver'), mt=$('mt'), login=$('login'), app=$('app'), lu=$('lu'), lp=$('lp'), le=$('le'), qrModal=$('qrModal'), qrImg=$('qrImg'), qrLink=$('qrLink'), sp=$('sp'), sx=$('sx'), si=$('si');
+const tabMain=$('tab-main'), tabSettings=$('tab-settings'), forceResetTip=$('forceResetTip'), setUser=$('set_user'), setPath=$('set_path'), setOldPass=$('set_old_pass'), setNewPass=$('set_new_pass');
+function hdr(){const t=localStorage.sessionToken||'';return t?{'Authorization':'Bearer '+t}:{}};
+async function api(u,o={}){const r=await fetch(u,{...o,headers:{'content-type':'application/json',...hdr(),...(o.headers||{})}});return r.json();}
+async function doLogin(){const r=await fetch('/auth/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({username:lu.value,password:lp.value})}).then(x=>x.json());if(!r.success){le.textContent=r.msg||'登录失败';return;}localStorage.sessionToken=r.token;forceReset=!!r.mustReset;login.style.display='none';app.style.display='block';init();if(forceReset){switchTab('settings');forceResetTip.style.display='block';alert('首次登录必须先修改密码');}}
+function logout(){localStorage.removeItem('sessionToken');location.reload();}
+function switchTab(t){const onMain=t==='main';tabMain.style.display=onMain?'':'none';tabSettings.style.display=onMain?'none':'';$('tabMainBtn').style.opacity=onMain?'1':'.7';$('tabSettingsBtn').style.opacity=onMain?'.7':'1';}
+async function loadPanelSettings(){const r=await api('/api/panel/settings');if(!r.success)return;setUser.value=r.obj.username||'';setPath.value=r.obj.panelPath||'/';if(r.obj.forceResetPassword){forceReset=true;forceResetTip.style.display='block';}}
+async function savePanelUsername(){const u=(setUser.value||'').trim();if(!u)return alert('用户名不能为空');const r=await api('/api/panel/settings',{method:'POST',body:JSON.stringify({username:u})});if(!r.success)return alert(r.msg||'保存用户名失败');alert('用户名已保存');}
+async function savePanelPath(){const p=(setPath.value||'').trim()||'/';const r=await api('/api/panel/settings',{method:'POST',body:JSON.stringify({panelPath:p})});if(!r.success)return alert(r.msg||'保存路径失败');alert('路径已保存（重启SUI服务后生效）');}
+async function changePanelPassword(){const np=(setNewPass.value||'').trim();if(np.length<6)return alert('新密码至少6位');const body={oldPassword:setOldPass.value,newPassword:np};const r=await api('/api/panel/change-password',{method:'POST',body:JSON.stringify(body)});if(!r.success)return alert(r.msg||'修改密码失败');forceReset=false;forceResetTip.style.display='none';setOldPass.value='';setNewPass.value='';alert('密码更新成功');switchTab('main');loadData();}
+function bytes(n){n=Number(n||0);if(n<1024)return n+'B';if(n<1048576)return(n/1024).toFixed(1)+'KB';if(n<1073741824)return(n/1048576).toFixed(1)+'MB';return(n/1073741824).toFixed(2)+'GB';}
+async function loadData(){const d=await api('/api/inbounds');if(!d.success){if((d.msg||'').includes('unauthorized')){localStorage.removeItem('sessionToken');app.style.display='none';login.style.display='block';}if(d.code==='RESET_REQUIRED'){forceReset=true;switchTab('settings');forceResetTip.style.display='block';list.innerHTML='<div class="card">首次登录请先到“面板设置”修改密码</div>';return;}list.innerHTML='<div class="card">加载失败：'+(d.msg||'未授权')+'</div>';return;}all=d.obj||[];render();}
+function render(){const qv=(q.value||'').toLowerCase();list.innerHTML='';const rows=all.filter(x=>`${x.remark||''} ${x.port} ${x.protocol}`.toLowerCase().includes(qv));if(!rows.length){list.innerHTML='<div class="card">暂无节点</div>';return;}for(const i of rows){const el=document.createElement('div');el.className='card';el.innerHTML=`<div class='row' style='justify-content:space-between'><div class='row'><b>#${i.id} ${i.remark||''}</b><span style='padding:2px 8px;border:1px solid #6f85ff66;border-radius:999px'>${i.protocol}</span><span style='padding:2px 8px;border:1px solid #6f85ff66;border-radius:999px'>:${i.port}</span><span style='padding:2px 8px;border:1px solid ${i.enable?'#3de6b4':'#ff5d8f'};border-radius:999px'>${i.enable?'启用':'停用'}</span></div><div>↓${bytes(i.down)} ↑${bytes(i.up||0)}</div></div><div class='row'><button onclick='toggle(${i.id})'>开关</button><button onclick='openEdit(${i.id})'>编辑</button><button onclick='copyLink(${i.id})'>复制链接</button><button onclick='showQR(${i.id})'>二维码</button><button class='danger' onclick='delN(${i.id})'>删除</button></div>`;list.appendChild(el)}}
+async function toggle(id){await api('/api/inbounds/'+id+'/toggle',{method:'POST',body:'{}'});loadData()}
+async function delN(id){if(!confirm('删?'))return;await api('/api/inbounds/'+id,{method:'DELETE'});loadData()}
+async function copyLink(id){const r=await api('/api/inbounds/'+id+'/links');if(!r.success||!r.obj?.length)return alert('暂无');await navigator.clipboard.writeText(r.obj[0]);alert('已复制')}
+async function showQR(id){const r=await api('/api/inbounds/'+id+'/qr');if(!r.success)return alert(r.msg||'失败');qrImg.src=r.obj.qrDataUrl||r.obj.qrUrl||'';qrLink.value=r.obj.link;qrModal.classList.add('show')}
+function setVis(el,show){el.style.display=show?'':'none'}
+function tune(){const p=f_protocol.value,n=f_network.value,s=f_security.value;const sh={uuid:(p==='vless'||p==='vmess'),password:(p==='trojan'||p==='shadowsocks'),method:(p==='shadowsocks'),flow:(p==='vless'),ws:(n==='ws'),tls:(s==='tls'||s==='reality'),reality:(s==='reality')};document.querySelectorAll('[data-group]').forEach(el=>setVis(el,!!sh[el.dataset.group]))}
+function genUUID(){f_uuid.value=(crypto.randomUUID?crypto.randomUUID():'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx').replace(/[xy]/g,c=>{const r=Math.random()*16|0,v=c==='x'?r:(r&0x3|0x8);return v.toString(16)})}
+function randSni(){const s=sniPool[Math.floor(Math.random()*sniPool.length)];f_sni.value=s;if(f_security.value==='reality')f_realityDest.value=s+':443'}
+async function genReality(){const r=await api('/api/system/xray/reality-gen');if(!r.success)return alert(r.msg||'失败');f_privateKey.value=r.obj.privateKey||'';f_publicKey.value=r.obj.publicKey||'';f_shortId.value=r.obj.shortId||'';if(!f_sni.value)randSni();if(!f_uuid.value)genUUID();if(!f_flow.value)f_flow.value='xtls-rprx-vision'}
+async function openAdd(){editId=null;mt.textContent='新增节点';modal.classList.add('show');const p=await api('/api/inbounds/next-port');if(p.success)f_port.value=p.obj;genUUID();tune()}
+function fill(n){const st=JSON.parse(n.settings||'{}'),ss=JSON.parse(n.streamSettings||'{}'),c=(st.clients||[])[0]||{};f_remark.value=n.remark||'';f_port.value=n.port||'';f_protocol.value=n.protocol||'vless';f_network.value=ss.network||'tcp';f_security.value=ss.security||'none';f_email.value=c.email||'';f_uuid.value=c.id||'';f_password.value=c.password||'';f_method.value=c.method||'aes-128-gcm';f_flow.value=c.flow||'';f_path.value=ss.wsSettings?.path||'/';f_host.value=ss.wsSettings?.headers?.Host||'';f_sni.value=ss.tlsSettings?.serverName||ss.realitySettings?.serverNames?.[0]||'';f_realityDest.value=ss.realitySettings?.dest||'';f_shortId.value=(ss.realitySettings?.shortIds||[])[0]||'';f_privateKey.value=ss.realitySettings?.privateKey||'';f_publicKey.value='';tune()}
+async function openEdit(id){const n=all.find(x=>x.id===id);if(!n)return;editId=id;mt.textContent='编辑节点';modal.classList.add('show');fill(n)}
+function closeM(){modal.classList.remove('show')}
+async function submitAdd(){const b={remark:f_remark.value,port:f_port.value,protocol:f_protocol.value,network:f_network.value,security:f_security.value,email:f_email.value,uuid:f_uuid.value,password:f_password.value,method:f_method.value,flow:f_flow.value,path:f_path.value,host:f_host.value,sni:f_sni.value,realityDest:f_realityDest.value,shortId:f_shortId.value,privateKey:f_privateKey.value};const url=editId?('/api/inbounds/'+editId+'/full'):'/api/inbounds/add';const m=editId?'PUT':'POST';const r=await api(url,{method:m,body:JSON.stringify(b)});if(!r.success)return alert(r.msg||'失败');closeM();loadData()}
+async function quickReality(){const remark=prompt('备注','reality-auto');if(remark===null)return;const r=await api('/api/inbounds/add-reality-quick',{method:'POST',body:JSON.stringify({remark})});if(!r.success)return alert(r.msg||'失败');loadData();alert('创建成功')}
+function applyNodeSpeedPreset(){f_protocol.value='vless';f_network.value='tcp';f_security.value='reality';if(!f_flow.value)f_flow.value='xtls-rprx-vision';if(!f_sni.value)randSni();if(!f_realityDest.value&&f_sni.value)f_realityDest.value=f_sni.value+':443';if(!f_uuid.value)genUUID();tune();alert('已套用 Reality + Vision 推荐参数')}
+async function restartXui(){await api('/api/system/restart-xui',{method:'POST',body:'{}'});alert('已重启')}
+async function runOpt(url,name){if(!confirm('应用 '+name+' ?'))return;const r=await api(url,{method:'POST',body:'{}'});alert(r.success?(r.msg||'已完成'):('失败:'+r.msg));if(r.success)loadStatus()}
+async function optBbr(){runOpt('/api/system/optimize/bbr','BBR + fq')}
+async function optDns(){runOpt('/api/system/optimize/dns','DNS 优化')}
+async function optSysctl(){runOpt('/api/system/optimize/sysctl','系统网络栈优化')}
+async function optAll(){runOpt('/api/system/optimize/all','一键网速优化')}
+async function loadVer(){const r=await api('/api/system/xray/versions');if(!r.success)return;ver.innerHTML='';(r.obj||[]).forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;ver.appendChild(o)})}
+async function loadCur(){const r=await api('/api/system/xray/version-current');if(r.success)cv.textContent='当前Xray:'+((r.obj.binary||'-')+' / '+(r.obj.panel||'-'))}
+async function loadStatus(){const r=await api('/api/system/status');if(!r.success)return;const o=r.obj||{};const ok=v=>v==='active';sp.textContent='Panel:'+((o.panel?.active)||'-');sp.style.borderColor=ok(o.panel?.active)?'#3de6b4':'#ff5d8f';sx.textContent='Xray:'+((o.xray?.active)||'-')+(o.xrayVersion?(' · '+o.xrayVersion):'');sx.style.borderColor=ok(o.xray?.active)?'#3de6b4':'#ff5d8f';si.textContent='Inbounds:'+(o.inboundsEnabled??'-')+'/'+(o.inboundsTotal??'-')}
+async function switchVer(){if(!ver.value)return;if(!confirm('切换到 '+ver.value+' ?'))return;const r=await api('/api/system/xray/switch',{method:'POST',body:JSON.stringify({version:ver.value})});alert(r.success?'切换完成':'失败:'+r.msg);loadCur();loadStatus()}
+async function init(){q.oninput=render;f_protocol.onchange=tune;f_network.onchange=tune;f_security.onchange=tune;switchTab('main');await loadPanelSettings();await loadVer();await loadCur();await loadStatus();if(!forceReset)await loadData();setInterval(loadStatus,10000);}
+(async()=>{if(localStorage.sessionToken){const me=await fetch('/auth/me',{headers:hdr()}).then(r=>r.json()).catch(()=>({success:false}));if(me.success){forceReset=!!me.mustReset;login.style.display='none';app.style.display='block';init();if(forceReset){switchTab('settings');forceResetTip.style.display='block';}return;}localStorage.removeItem('sessionToken');}login.style.display='block';app.style.display='none';})();
+</script></body></html>
