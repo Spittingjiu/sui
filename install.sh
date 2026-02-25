@@ -25,6 +25,20 @@ preflight(){
 }
 choose_mode(){
   local m
+
+  # 非交互环境（如 CI/管道）默认走 1，避免卡住
+  if [[ -n "${SUI_MODE:-}" ]]; then
+    m="${SUI_MODE}"
+    [[ "$m" == "1" || "$m" == "2" ]] || { err "SUI_MODE 仅支持 1 或 2"; exit 1; }
+    log "检测到 SUI_MODE=${m}，按指定模式安装"
+    echo "$m"; return
+  fi
+
+  if [[ ! -e /dev/tty ]]; then
+    warn "未检测到交互终端，默认使用模式 1（Docker）"
+    echo "1"; return
+  fi
+
   while true; do
     clear || true
     echo "========================================"
