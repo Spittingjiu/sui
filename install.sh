@@ -191,6 +191,8 @@ setup_binary_mode(){
   # 重装/覆盖前先停服务，避免 "Text file busy"
   systemctl stop "$SERVICE_NAME" >/dev/null 2>&1 || true
   docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
+  pkill -f '/opt/sui-panel/sui-panel-bin' >/dev/null 2>&1 || true
+  sleep 0.3
 
   log "下载二进制与面板文件..."
   local tmp_bin
@@ -319,6 +321,8 @@ update_sui_bin(){
 
   # 覆盖二进制前先停服务，避免 Text file busy
   systemctl stop "$SERVICE" >/dev/null 2>&1 || true
+  pkill -f '/opt/sui-panel/sui-panel-bin' >/dev/null 2>&1 || true
+  sleep 0.3
 
   # 二进制与代码优先从 GitHub 拉最新
   curl -fL --retry 3 -o "$work/sui-panel-bin" "$BIN_URL"
