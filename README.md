@@ -45,7 +45,13 @@ node server.mjs
 
 ## 生产部署（推荐）
 
-使用项目内安装脚本：
+### 一键安装（GitHub）
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/Spittingjiu/sui/main/install.sh)
+```
+
+### 本地安装（仓库内）
 
 ```bash
 bash install.sh
