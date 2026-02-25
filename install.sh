@@ -7,10 +7,8 @@ warn(){ echo -e "${YELLOW}[WARN]${NC} $*"; }
 err(){ echo -e "${RED}[ERR ]${NC} $*"; }
 
 APP_DIR="/opt/sui-panel"
-PKG_URL="https://cui.wuhai.eu.org/sui-panel.tar.gz"
 SERVICE_NAME="sui-panel"
 ENV_FILE="/etc/default/${SERVICE_NAME}"
-CONTAINER_NAME="sui-panel"
 BIN_URL="https://raw.githubusercontent.com/Spittingjiu/sui/main/dist/sui-panel-full-linux-amd64"
 SERVER_URL="https://raw.githubusercontent.com/Spittingjiu/sui/main/server.mjs"
 PANEL_INDEX_URL="https://raw.githubusercontent.com/Spittingjiu/sui/main/public/index.html"
@@ -20,50 +18,15 @@ BACKUP_ROOT="/var/lib/sui-installer"
 BACKUP_DIR="$BACKUP_ROOT/backup"
 
 require_root(){ [[ ${EUID} -eq 0 ]] || { err "请用 root 执行"; exit 1; }; }
+
 preflight(){
   local root_mb tmp_mb
-  root_mb=$(df -Pm / | awk 'NR==2{print $4}'); tmp_mb=$(df -Pm /tmp | awk 'NR==2{print $4}')
+  root_mb=$(df -Pm / | awk 'NR==2{print $4}')
+  tmp_mb=$(df -Pm /tmp | awk 'NR==2{print $4}')
   log "环境检测：/ 可用 ${root_mb}MB, /tmp 可用 ${tmp_mb}MB"
   (( root_mb >= 700 && tmp_mb >= 200 )) || { err "磁盘不足（要求 / >=700MB /tmp>=200MB）"; exit 1; }
 }
-choose_mode(){
-  local m
-  local tty="/dev/tty"
 
-  # 非交互环境（如 CI/管道）默认走 1，避免卡住
-  if [[ -n "${SUI_MODE:-}" ]]; then
-    m="${SUI_MODE}"
-    [[ "$m" == "1" || "$m" == "2" ]] || { err "SUI_MODE 仅支持 1 或 2"; exit 1; }
-    log "检测到 SUI_MODE=${m}，按指定模式安装" >&2
-    echo "$m"; return
-  fi
-
-  if [[ ! -e "$tty" ]]; then
-    warn "未检测到交互终端，默认使用模式 1（Docker）" >&2
-    echo "1"; return
-  fi
-
-  while true; do
-    cat > "$tty" <<'EOT'
-========================================
-SUI Panel 安装模式选择
-----------------------------------------
-1) Docker 一键版（推荐）
-   - 自动装 Docker 并启动容器
-   - 占用更稳，升级回滚方便
-
-2) 全功能二进制版（推荐小内存）
-   - 与线上 SUI 面板同功能
-   - 直接下载预编译二进制（不安装 Go/Node）
-========================================
-EOT
-    read -r -p "请选择安装模式 [1/2，默认1]: " m < "$tty" || true
-    m="${m:-1}"
-    [[ "$m" == "1" || "$m" == "2" ]] && { echo "$m"; return; }
-    warn "输入无效，请输入 1 或 2" > "$tty"
-    sleep 1
-  done
-}
 apt_base(){
   export DEBIAN_FRONTEND=noninteractive
   dpkg --configure -a || true
@@ -71,10 +34,9 @@ apt_base(){
   apt-get update -y
   apt-get install -y curl ca-certificates rsync unzip
 }
+
 write_env(){
-  if [[ -s "$ENV_FILE" ]]; then
-    return
-  fi
+  [[ -s "$ENV_FILE" ]] && return
   cat > "$ENV_FILE" <<EOF
 PORT=8810
 PANEL_USER=admin
@@ -105,9 +67,7 @@ backup_existing_state(){
     cp -a /etc/cui-xray/config.json "$BACKUP_DIR/etc-cui-xray/"
     has=1
   fi
-  if [[ "$has" -eq 1 ]]; then
-    date -Iseconds > "$BACKUP_ROOT/created_at"
-  fi
+  [[ "$has" -eq 1 ]] && date -Iseconds > "$BACKUP_ROOT/created_at"
 }
 
 restore_existing_state(){
@@ -123,7 +83,6 @@ restore_existing_state(){
     restored=1
   fi
   if [[ "$restored" -eq 1 ]]; then
-    # 老环境迁移时不强制首登改密，避免升级后看不到节点
     if [[ ! -s /opt/cui-panel/panel-settings.json ]]; then
       cat > /opt/cui-panel/panel-settings.json <<EOT
 {"username":"admin","password":"admin123","panelPath":"/","forceResetPassword":false}
@@ -151,6 +110,7 @@ server_sha256=$(sha256sum "$APP_DIR/server.mjs" 2>/dev/null | awk '{print $1}')
 index_sha256=$(sha256sum "$APP_DIR/public/index.html" 2>/dev/null | awk '{print $1}')
 EOF
 }
+
 install_xray_if_needed(){
   if [[ ! -x /usr/local/bin/xray ]]; then
     log "安装 Xray core..."
@@ -165,46 +125,22 @@ install_xray_if_needed(){
   fi
 }
 
-# Docker mode (现有完整面板)
-install_app_node(){
-  local tmp
-  tmp=$(mktemp -d)
-  curl -fL --retry 3 -o "$tmp/panel.tar.gz" "$PKG_URL"
-  mkdir -p "$APP_DIR"
-  tar -xzf "$tmp/panel.tar.gz" -C "$tmp"
-  rsync -a --delete --exclude node_modules "$tmp/sui-panel/" "$APP_DIR/"
-  rm -rf "$tmp"
-}
-install_docker_if_needed(){ command -v docker >/dev/null 2>&1 && return; curl -fsSL https://get.docker.com | sh; systemctl enable --now docker; }
-setup_docker_mode(){
-  install_app_node
-  install_docker_if_needed
-  systemctl enable --now docker || true
-  docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
-  docker run -d --name "$CONTAINER_NAME" --restart always -p 8810:8810 --env-file "$ENV_FILE" -v "$APP_DIR:/app" -w /app node:20-bookworm sh -lc "npm install --omit=dev && node server.mjs"
-}
-
-# Binary mode (prebuilt)
 setup_binary_mode(){
   mkdir -p "$APP_DIR/public"
 
-  # 重装/覆盖前先停服务，避免 "Text file busy"
   systemctl stop "$SERVICE_NAME" >/dev/null 2>&1 || true
-  docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
   pkill -f '/opt/sui-panel/sui-panel-bin' >/dev/null 2>&1 || true
   sleep 0.3
 
   log "下载二进制与面板文件..."
-  local tmp_bin old_bin
+  local tmp_bin old_bin tmp
   tmp_bin=$(mktemp)
   old_bin="$APP_DIR/sui-panel-bin.old.$(date +%s)"
   curl -fL --retry 3 -o "$tmp_bin" "$BIN_URL"
-  # 若旧二进制仍被占用，先改名再替换，避免 Text file busy
   [[ -f "$APP_DIR/sui-panel-bin" ]] && mv -f "$APP_DIR/sui-panel-bin" "$old_bin" 2>/dev/null || true
   install -m 0755 "$tmp_bin" "$APP_DIR/sui-panel-bin"
   rm -f "$tmp_bin"
 
-  # 代码文件优先从 GitHub 获取；失败时回退到历史 tar 包源
   if ! curl -fL --retry 3 -o "$APP_DIR/server.mjs" "$SERVER_URL"; then
     warn "GitHub 获取 server.mjs 失败，回退到历史包源"
     tmp=$(mktemp -d)
@@ -214,11 +150,11 @@ setup_binary_mode(){
     cp -f "$tmp/sui-panel/public/index.html" "$APP_DIR/public/index.html"
     rm -rf "$tmp"
   else
-    if ! curl -fL --retry 3 -o "$APP_DIR/public/index.html" "$PANEL_INDEX_URL?t=$(date +%s)"; then
-      warn "GitHub 获取前端失败，保留现有前端文件"
-    fi
+    curl -fL --retry 3 -o "$APP_DIR/public/index.html" "$PANEL_INDEX_URL?t=$(date +%s)" || warn "GitHub 获取前端失败，保留现有前端文件"
   fi
+
   write_version_meta install
+
   cat > "/etc/systemd/system/${SERVICE_NAME}.service" <<EOF
 [Unit]
 Description=SUI Panel (Binary)
@@ -234,10 +170,10 @@ User=root
 [Install]
 WantedBy=multi-user.target
 EOF
+
   systemctl daemon-reload
   systemctl enable --now "$SERVICE_NAME"
 }
-
 
 write_sui_cli(){
 cat > /usr/local/bin/sui <<'EOF'
@@ -319,15 +255,14 @@ self_update_menu(){
 
 update_sui_bin(){
   self_update_menu >/dev/null 2>&1 || true
+  local work
   work=$(mktemp -d)
   mkdir -p /opt/sui-panel/public
 
-  # 覆盖二进制前先停服务，避免 Text file busy
   systemctl stop "$SERVICE" >/dev/null 2>&1 || true
   pkill -f '/opt/sui-panel/sui-panel-bin' >/dev/null 2>&1 || true
   sleep 0.3
 
-  # 二进制与代码优先从 GitHub 拉最新
   curl -fL --retry 3 -o "$work/sui-panel-bin" "$BIN_URL"
   [[ -f "$BIN_PATH" ]] && mv -f "$BIN_PATH" "${BIN_PATH}.old.$(date +%s)" 2>/dev/null || true
   install -m 0755 "$work/sui-panel-bin" "$BIN_PATH"
@@ -339,9 +274,7 @@ update_sui_bin(){
     [ -f "$work/sui-panel/server.mjs" ] && cp -f "$work/sui-panel/server.mjs" /opt/sui-panel/server.mjs
     [ -f "$work/sui-panel/public/index.html" ] && cp -f "$work/sui-panel/public/index.html" /opt/sui-panel/public/index.html
   else
-    if ! curl -fL --retry 3 -o /opt/sui-panel/public/index.html "$PANEL_INDEX_URL?t=$(date +%s)"; then
-      echo "GitHub index.html 拉取失败，保留现有前端"
-    fi
+    curl -fL --retry 3 -o /opt/sui-panel/public/index.html "$PANEL_INDEX_URL?t=$(date +%s)" || echo "GitHub index.html 拉取失败，保留现有前端"
   fi
 
   write_version_meta update
@@ -373,7 +306,6 @@ systemctl restart systemd-resolved || true
 
 opt_sysctl(){
 cat >/etc/sysctl.d/99-sui-net.conf <<'EOT'
-# 保守网络参数（避免激进配置导致降速）
 net.core.somaxconn = 4096
 net.core.netdev_max_backlog = 2000
 net.ipv4.tcp_max_syn_backlog = 4096
@@ -398,49 +330,18 @@ while true; do
   echo "0) 退出"
   read -r -p "选择: " c
   case "$c" in
-    1)
-      read -r -p "新用户名: " u
-      [[ -n "${u:-}" ]] || { echo "用户名不能为空"; read -r -p "回车继续"; continue; }
-      set_kv PANEL_USER "$u"
-      reload_apply
-      echo "用户名已更新"
-      read -r -p "回车继续"
-      ;;
-    2)
-      read -r -p "新密码: " p
-      [[ -n "${p:-}" ]] || { echo "密码不能为空"; read -r -p "回车继续"; continue; }
-      set_kv PANEL_PASS "$p"
-      reload_apply
-      echo "密码已更新"
-      read -r -p "回车继续"
-      ;;
-    3)
-      read -r -p "新端口: " pt
-      set_kv PORT "$pt"
-      reload_apply
-      echo "已更新端口为 $pt"
-      read -r -p "回车继续"
-      ;;
-    4)
-      update_sui_bin
-      echo "SUI 面板与二进制已更新并重启"
-      read -r -p "回车继续"
-      ;;
+    1) read -r -p "新用户名: " u; [[ -n "${u:-}" ]] || { echo "用户名不能为空"; read -r -p "回车继续"; continue; }; set_kv PANEL_USER "$u"; reload_apply; echo "用户名已更新"; read -r -p "回车继续" ;;
+    2) read -r -p "新密码: " p; [[ -n "${p:-}" ]] || { echo "密码不能为空"; read -r -p "回车继续"; continue; }; set_kv PANEL_PASS "$p"; reload_apply; echo "密码已更新"; read -r -p "回车继续" ;;
+    3) read -r -p "新端口: " pt; set_kv PORT "$pt"; reload_apply; echo "已更新端口为 $pt"; read -r -p "回车继续" ;;
+    4) update_sui_bin; echo "SUI 面板与二进制已更新并重启"; read -r -p "回车继续" ;;
     5)
       echo "--- SUI 状态 ---"
-      mode=$(cat /etc/sui-panel.mode 2>/dev/null || echo unknown)
-      echo "安装模式: $mode"
       current_port=$(grep -E '^PORT=' "$ENV_FILE" 2>/dev/null | tail -n1 | cut -d= -f2-)
       echo "当前端口: ${current_port:-8810}"
       if [[ -s /opt/sui-panel/VERSION ]]; then
         echo "版本摘要: $(grep '^commit=' /opt/sui-panel/VERSION | cut -d= -f2 | cut -c1-12)"
       fi
       echo
-      if [[ "$mode" == "docker" ]] || docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^sui-panel$'; then
-        echo "[Docker 容器]"
-        docker ps --filter name=sui-panel --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' || true
-        echo
-      fi
       echo "[sui-panel.service]"
       systemctl --no-pager status "$SERVICE" | sed -n '1,25p' || true
       echo
@@ -465,8 +366,14 @@ chmod +x /usr/local/bin/sui
 }
 
 main(){
-  require_root; preflight; backup_existing_state; apt_base; install_xray_if_needed; write_env
-  log "已固定为二进制安装模式（不再使用 Docker）"
+  require_root
+  preflight
+  backup_existing_state
+  apt_base
+  install_xray_if_needed
+  write_env
+
+  log "已固定为二进制安装模式"
   setup_binary_mode
   echo binary > /etc/sui-panel.mode
   restore_existing_state
@@ -474,7 +381,6 @@ main(){
   systemctl restart cui-xray-core.service >/dev/null 2>&1 || true
   write_sui_cli
 
-  # 实际生效端口以 ENV_FILE 为准（保留用户历史配置）
   local effective_port
   effective_port=$(grep -E '^PORT=' "$ENV_FILE" 2>/dev/null | tail -n1 | cut -d= -f2-)
   effective_port=${effective_port:-8810}
@@ -483,4 +389,5 @@ main(){
   echo "访问: http://<你的服务器IP>:${effective_port}"
   echo "提示: 如需修改端口，执行命令: sui -> 3) 修改面板端口"
 }
+
 main "$@"
