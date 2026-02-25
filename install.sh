@@ -187,9 +187,18 @@ setup_docker_mode(){
 # Binary mode (prebuilt)
 setup_binary_mode(){
   mkdir -p "$APP_DIR/public"
+
+  # 重装/覆盖前先停服务，避免 "Text file busy"
+  systemctl stop "$SERVICE_NAME" >/dev/null 2>&1 || true
+  docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
+
   log "下载二进制与面板文件..."
-  curl -fL --retry 3 -o "$APP_DIR/sui-panel-bin" "$BIN_URL"
-  chmod +x "$APP_DIR/sui-panel-bin"
+  local tmp_bin
+  tmp_bin=$(mktemp)
+  curl -fL --retry 3 -o "$tmp_bin" "$BIN_URL"
+  install -m 0755 "$tmp_bin" "$APP_DIR/sui-panel-bin"
+  rm -f "$tmp_bin"
+
   # 代码文件优先从 GitHub 获取；失败时回退到历史 tar 包源
   if ! curl -fL --retry 3 -o "$APP_DIR/server.mjs" "$SERVER_URL"; then
     warn "GitHub 获取 server.mjs 失败，回退到历史包源"
@@ -307,6 +316,9 @@ update_sui_bin(){
   self_update_menu >/dev/null 2>&1 || true
   work=$(mktemp -d)
   mkdir -p /opt/sui-panel/public
+
+  # 覆盖二进制前先停服务，避免 Text file busy
+  systemctl stop "$SERVICE" >/dev/null 2>&1 || true
 
   # 二进制与代码优先从 GitHub 拉最新
   curl -fL --retry 3 -o "$work/sui-panel-bin" "$BIN_URL"
