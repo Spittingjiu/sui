@@ -68,19 +68,6 @@
       <span id="si" class="badge">Inbounds:-</span>
     </div>
 
-    <div class="card">
-      <div class="row" style="margin-bottom:8px"><b>端口转发</b><span class="muted">输入目标IP和端口创建转发</span></div>
-      <div class="row">
-        <input id="fw_listen" placeholder="监听端口(如 12345)" style="width:170px" />
-        <select id="fw_protocol" style="width:100px"><option value="tcp">TCP</option><option value="udp">UDP</option></select>
-        <input id="fw_target_host" placeholder="目标IP/域名" style="width:220px" />
-        <input id="fw_target_port" placeholder="目标端口" style="width:140px" />
-        <input id="fw_remark" placeholder="备注(可选)" class="grow" />
-        <button onclick="addForward()">添加转发</button>
-      </div>
-      <div id="fw_list" style="margin-top:10px"></div>
-    </div>
-
     <div id="list"></div>
   </div>
 
@@ -135,10 +122,6 @@
     <input id="f_privateKey" placeholder="privateKey" data-group="reality" />
     <input id="f_publicKey" placeholder="publicKey(展示用)" data-group="reality" />
 
-    <label class="row" style="grid-column:1/-1"><input id="f_forward_enable" type="checkbox" style="width:auto" /> 同时创建端口转发</label>
-    <select id="f_forward_protocol" style="width:120px"><option value="tcp">TCP</option><option value="udp">UDP</option></select>
-    <input id="f_forward_target_host" placeholder="转发目标IP/域名" />
-    <input id="f_forward_target_port" placeholder="转发目标端口" />
   </div>
   <div class="row" style="margin-top:10px">
     <button onclick="genUUID()">生成 UUID</button>
@@ -163,10 +146,9 @@ let all=[],editId=null,forceReset=false;
 const sniPool=['addons.mozilla.org','www.icloud.com','www.lovelive-anime.jp','icloud.cdn-apple.com','swdist.apple.com','www.microsoft.com','www.apple.com','www.bing.com','www.amazon.com'];
 const q=$('q'), list=$('list'), cv=$('cv'), mt=$('mt'), login=$('login'), app=$('app'), lu=$('lu'), lp=$('lp'), le=$('le');
 const qrModal=$('qrModal'), qrImg=$('qrImg'), qrLink=$('qrLink'), sp=$('sp'), sx=$('sx'), si=$('si');
-const fwList=$('fw_list'), fwListen=$('fw_listen'), fwProtocol=$('fw_protocol'), fwTargetHost=$('fw_target_host'), fwTargetPort=$('fw_target_port'), fwRemark=$('fw_remark');
+// forward UI removed
 const tabMain=$('tab-main'), tabSettings=$('tab-settings'), forceResetTip=$('forceResetTip');
 const setUser=$('set_user'), setPath=$('set_path'), setOldPass=$('set_old_pass'), setNewPass=$('set_new_pass');
-const fForwardEnable=$('f_forward_enable'), fForwardProtocol=$('f_forward_protocol'), fForwardTargetHost=$('f_forward_target_host'), fForwardTargetPort=$('f_forward_target_port');
 let API_PREFIX='';
 
 function hdr(){const t=localStorage.sessionToken||'';return t?{'Authorization':'Bearer '+t}:{}};
@@ -198,27 +180,27 @@ async function copyLink(id){const r=await api('/api/inbounds/'+id+'/links');if(!
 async function showQR(id){const r=await api('/api/inbounds/'+id+'/qr');if(!r.success)return alert(r.msg||'失败');qrImg.src=r.obj.qrDataUrl||r.obj.qrUrl||'';qrLink.value=r.obj.link||'';qrModal.classList.add('show')}
 
 function setVis(el,show){el.style.display=show?'':'none'}
-function tune(){const p=f_protocol.value,n=f_network.value,s=f_security.value;const sh={uuid:(p==='vless'||p==='vmess'),password:(p==='trojan'||p==='shadowsocks'),method:(p==='shadowsocks'),flow:(p==='vless'),ws:(n==='ws'),tls:(s==='tls'||s==='reality'),reality:(s==='reality')};document.querySelectorAll('[data-group]').forEach(el=>setVis(el,!!sh[el.dataset.group]))}
+function tune(){const p=f_protocol.value,n=f_network.value;if(p==='shadowsocks'){f_security.value='none';f_security.disabled=true;}else{f_security.disabled=false;}const s=f_security.value;const sh={uuid:(p==='vless'||p==='vmess'),password:(p==='trojan'||p==='shadowsocks'),method:(p==='shadowsocks'),flow:(p==='vless'),ws:(n==='ws'),tls:(s==='tls'||s==='reality'),reality:(s==='reality')};document.querySelectorAll('[data-group]').forEach(el=>setVis(el,!!sh[el.dataset.group]))}
 function genUUID(){f_uuid.value=(crypto.randomUUID?crypto.randomUUID():'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx').replace(/[xy]/g,c=>{const r=Math.random()*16|0,v=c==='x'?r:(r&0x3|0x8);return v.toString(16)})}
 function randSni(){const s=sniPool[Math.floor(Math.random()*sniPool.length)];f_sni.value=s;if(f_security.value==='reality')f_realityDest.value=s+':443'}
 async function genReality(){const r=await api('/api/system/xray/reality-gen');if(!r.success)return alert(r.msg||'失败');f_privateKey.value=r.obj.privateKey||'';f_publicKey.value=r.obj.publicKey||'';f_shortId.value=r.obj.shortId||'';if(!f_sni.value)randSni();if(!f_uuid.value)genUUID();if(!f_flow.value)f_flow.value='xtls-rprx-vision'}
-async function openAdd(){editId=null;mt.textContent='新增节点';modal.classList.add('show');const p=await api('/api/inbounds/next-port');if(p.success)f_port.value=p.obj;fForwardEnable.checked=false;fForwardProtocol.value='tcp';fForwardTargetHost.value='';fForwardTargetPort.value='';genUUID();tune()}
+async function openAdd(){editId=null;mt.textContent='新增节点';modal.classList.add('show');const p=await api('/api/inbounds/next-port');if(p.success)f_port.value=p.obj;genUUID();tune()}
 function fill(n){const st=JSON.parse(n.settings||'{}'),ss=JSON.parse(n.streamSettings||'{}'),c=(st.clients||[])[0]||{};f_remark.value=n.remark||'';f_port.value=n.port||'';f_protocol.value=n.protocol||'vless';f_network.value=ss.network||'tcp';f_security.value=ss.security||'none';f_email.value=c.email||'';f_uuid.value=c.id||'';f_password.value=c.password||'';f_method.value=c.method||'aes-128-gcm';f_flow.value=c.flow||'';f_path.value=ss.wsSettings?.path||'/';f_host.value=ss.wsSettings?.headers?.Host||'';f_sni.value=ss.tlsSettings?.serverName||ss.realitySettings?.serverNames?.[0]||'';f_realityDest.value=ss.realitySettings?.dest||'';f_shortId.value=(ss.realitySettings?.shortIds||[])[0]||'';f_privateKey.value=ss.realitySettings?.privateKey||'';f_publicKey.value='';tune()}
 async function openEdit(id){const n=all.find(x=>x.id===id);if(!n)return;editId=id;mt.textContent='编辑节点';modal.classList.add('show');fill(n)}
 function closeM(){modal.classList.remove('show')}
-async function submitAdd(){const b={remark:f_remark.value,port:f_port.value,protocol:f_protocol.value,network:f_network.value,security:f_security.value,email:f_email.value,uuid:f_uuid.value,password:f_password.value,method:f_method.value,flow:f_flow.value,path:f_path.value,host:f_host.value,sni:f_sni.value,realityDest:f_realityDest.value,shortId:f_shortId.value,privateKey:f_privateKey.value};const url=editId?('/api/inbounds/'+editId+'/full'):'/api/inbounds/add';const m=editId?'PUT':'POST';const r=await api(url,{method:m,body:JSON.stringify(b)});if(!r.success)return alert(r.msg||'失败');if(!editId&&fForwardEnable.checked){const targetHost=(fForwardTargetHost.value||'').trim(),targetPort=Number(fForwardTargetPort.value||0),listenPort=Number(f_port.value||0),protocol=fForwardProtocol.value||'tcp';if(!targetHost||!targetPort)return alert('节点已创建，但转发失败：请填写目标IP和目标端口');const fr=await api('/api/forwards',{method:'POST',body:JSON.stringify({listenPort,targetHost,targetPort,protocol,remark:'node-'+(f_remark.value||listenPort)})});if(!fr.success)return alert('节点已创建，但转发失败：'+(fr.msg||'unknown'));}closeM();loadData();loadForwards()}
-async function quickReality(){const remark=prompt('备注','reality-auto');if(remark===null)return;const r=await api('/api/inbounds/add-reality-quick',{method:'POST',body:JSON.stringify({remark})});if(!r.success)return alert(r.msg||'失败');loadData();alert('创建成功')}
+async function submitAdd(){const b={remark:f_remark.value,port:f_port.value,protocol:f_protocol.value,network:f_network.value,security:f_security.value,email:f_email.value,uuid:f_uuid.value,password:f_password.value,method:f_method.value,flow:f_flow.value,path:f_path.value,host:f_host.value,sni:f_sni.value,realityDest:f_realityDest.value,shortId:f_shortId.value,privateKey:f_privateKey.value};const url=editId?('/api/inbounds/'+editId+'/full'):'/api/inbounds/add';const m=editId?'PUT':'POST';const r=await api(url,{method:m,body:JSON.stringify(b)});if(!r.success)return alert(r.msg||'失败');closeM();loadData()}
+function randomNodeName(){const a=['sunny','lucky','silver','gentle','swift','quiet','stellar','autumn','velvet','amber'];const b=['bridge','garden','harbor','forest','island','comet','breeze','valley','summit','oasis'];return `${a[Math.floor(Math.random()*a.length)]}-${b[Math.floor(Math.random()*b.length)]}`;}
+async function quickReality(){const def=randomNodeName();const remark=prompt('备注',def);if(remark===null)return;const finalName=(remark||'').trim()||def;const r=await api('/api/inbounds/add-reality-quick',{method:'POST',body:JSON.stringify({remark:finalName})});if(!r.success)return alert(r.msg||'失败');loadData();alert('创建成功')}
 function applyNodeSpeedPreset(){f_protocol.value='vless';f_network.value='tcp';f_security.value='reality';if(!f_flow.value)f_flow.value='xtls-rprx-vision';if(!f_sni.value)randSni();if(!f_realityDest.value&&f_sni.value)f_realityDest.value=f_sni.value+':443';if(!f_uuid.value)genUUID();tune();alert('已应用推荐参数')}
 
 async function loadCur(){const r=await api('/api/system/xray/version-current');if(r.success){cv.textContent='当前 Xray: '+((r.obj.binary||'-')+' / '+(r.obj.panel||'-'));return;}cv.textContent='当前 Xray: 获取失败'}
 async function loadStatus(){const r=await api('/api/system/status');if(!r.success){sp.textContent='Panel:err';sx.textContent='Xray:err';si.textContent='Inbounds:err';sp.title=sx.title=si.title=(r.msg||'status failed');return;}const o=r.obj||{};const ok=v=>v==='active';sp.textContent='Panel:'+((o.panel?.active)||'-');sp.className='badge '+(ok(o.panel?.active)?'status-ok':'status-bad');sx.textContent='Xray:'+((o.xray?.active)||'-')+(o.xrayVersion?(' · '+o.xrayVersion):'');sx.className='badge '+(ok(o.xray?.active)?'status-ok':'status-bad');si.textContent='Inbounds:'+(o.inboundsEnabled??'-')+'/'+(o.inboundsTotal??'-')}
 
-async function loadForwards(){const r=await api('/api/forwards');if(!r.success){fwList.innerHTML='<div class="muted">加载失败：'+(r.msg||'unknown')+'</div>';return;}const arr=r.obj||[];if(!arr.length){fwList.innerHTML='<div class="muted">暂无转发规则</div>';return;}fwList.innerHTML='';for(const x of arr){const row=document.createElement('div');row.className='row';row.style.margin='6px 0';const on=x.active==='active';row.innerHTML=`<span class='badge'>#${x.id}</span><span class='badge'>${(x.protocol||'tcp').toUpperCase()}</span><span class='badge'>:${x.listenPort} → ${x.targetHost}:${x.targetPort}</span><span class='badge ${on?'status-ok':'status-bad'}'>${x.active||'-'}</span><span class='muted'>${x.remark||''}</span><span class='grow'></span><button onclick='toggleForward(${x.id})'>${x.enabled?'停用':'启用'}</button><button class='danger' onclick='delForward(${x.id})'>删除</button>`;fwList.appendChild(row);}}
-async function addForward(){const listenPort=Number(fwListen.value||0),targetPort=Number(fwTargetPort.value||0),targetHost=(fwTargetHost.value||'').trim(),protocol=(fwProtocol.value||'tcp'),remark=(fwRemark.value||'').trim();if(!listenPort||!targetHost||!targetPort)return alert('请填写监听端口/目标IP/目标端口');const r=await api('/api/forwards',{method:'POST',body:JSON.stringify({listenPort,targetHost,targetPort,protocol,remark})});if(!r.success)return alert(r.msg||'创建失败');fwListen.value='';fwTargetHost.value='';fwTargetPort.value='';fwRemark.value='';loadForwards();}
-async function toggleForward(id){const r=await api('/api/forwards/'+id+'/toggle',{method:'POST',body:'{}'});if(!r.success)return alert(r.msg||'操作失败');loadForwards();}
-async function delForward(id){if(!confirm('确认删除该转发规则?'))return;const r=await api('/api/forwards/'+id,{method:'DELETE'});if(!r.success)return alert(r.msg||'删除失败');loadForwards();}
-
-async function init(){q.oninput=render;f_protocol.onchange=tune;f_network.onchange=tune;f_security.onchange=tune;switchTab('main');await loadPanelSettings();await loadCur();await loadStatus();await loadForwards();if(!forceReset)await loadData();setInterval(loadStatus,10000);setInterval(loadForwards,12000)}
+async function init(){q.oninput=render;f_protocol.onchange=tune;f_network.onchange=tune;f_security.onchange=tune;switchTab('main');
+  await Promise.all([loadPanelSettings(),loadCur(),loadStatus()]);
+  if(!forceReset)loadData();
+  setInterval(loadStatus,10000)
+}
 (async()=>{if(localStorage.sessionToken){const me=await api('/auth/me');if(me.success){API_PREFIX=normPrefix(me.panelPath||'');forceReset=!!me.mustReset;login.style.display='none';app.style.display='block';init();if(forceReset){switchTab('settings');forceResetTip.style.display='block';}return;}localStorage.removeItem('sessionToken');}login.style.display='block';app.style.display='none';})();
 </script>
 </body>
