@@ -9,12 +9,13 @@
       --bg:#0b1020;--bg2:#121933;--card:#151f3dcc;--line:#6f85ff55;--txt:#eaf0ff;
       --pri:#6f7dff;--ok:#3de6b4;--bad:#ff5d8f;--muted:#9aa6d1;
     }
-    *{box-sizing:border-box} body{margin:0;background:radial-gradient(1200px 500px at -20% -20%,#5c5dff40,transparent 65%),radial-gradient(900px 480px at 120% -10%,#00d3ff30,transparent 62%),linear-gradient(145deg,var(--bg),#111834 45%,#131133);color:var(--txt);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto}
-    .wrap{max-width:1120px;margin:auto;padding:16px}
-    .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px;margin:10px 0;backdrop-filter:blur(8px);box-shadow:0 8px 24px #0006}
+    *{box-sizing:border-box} body{margin:0;background:radial-gradient(1200px 500px at -20% -20%,#5c5dff40,transparent 65%),radial-gradient(900px 480px at 120% -10%,#00d3ff30,transparent 62%),linear-gradient(145deg,var(--bg),#111834 45%,#131133);color:var(--txt);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto;transition:background .45s ease,color .3s ease}
+    .wrap{max-width:1120px;margin:auto;padding:16px;animation:fadeIn .35s ease}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px;margin:10px 0;backdrop-filter:blur(8px);box-shadow:0 8px 24px #0006;transition:transform .2s ease,border-color .25s ease,box-shadow .25s ease,opacity .2s ease}
+    .card:hover{transform:translateY(-1px);border-color:#8ca0ff88;box-shadow:0 12px 30px #0007}
     .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
     .grow{flex:1}
-    input,select,textarea,button{background:#111a3a;color:#fff;border:1px solid #5c74d9;border-radius:10px;padding:9px 10px}
+    input,select,textarea,button{background:#111a3a;color:#fff;border:1px solid #5c74d9;border-radius:10px;padding:9px 10px;transition:border-color .2s ease,box-shadow .2s ease,transform .15s ease,filter .2s ease}
     button{background:linear-gradient(90deg,#5873ff,#7f62ff);border:0;cursor:pointer}
     button:hover{filter:brightness(1.08)}
     .danger{background:linear-gradient(90deg,#ff557f,#ff4dbd)}
@@ -23,8 +24,10 @@
     .muted{color:var(--muted)}
     .tabs button{opacity:.75}.tabs .on{opacity:1}
     .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
-    .m{position:fixed;inset:0;background:#050b1ccc;display:none;align-items:center;justify-content:center}
-    .m.show{display:flex}.box{width:min(980px,95vw);max-height:90vh;overflow:auto;background:#111a35f0;border:1px solid var(--line);border-radius:16px;padding:14px}
+    .m{position:fixed;inset:0;background:#050b1ccc;display:none;align-items:center;justify-content:center;transition:opacity .2s ease}
+    .m.show{display:flex;animation:fadeIn .18s ease}.box{width:min(980px,95vw);max-height:90vh;overflow:auto;background:#111a35f0;border:1px solid var(--line);border-radius:16px;padding:14px;animation:popIn .2s ease}
+    @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+    @keyframes popIn{from{opacity:.35;transform:translateY(6px) scale(.99)}to{opacity:1;transform:translateY(0) scale(1)}}
     @media(max-width:860px){.grid{grid-template-columns:1fr}}
   </style>
 </head>
@@ -126,7 +129,7 @@
     <input id="f_host" placeholder="ws host" data-group="ws" />
 
     <input id="f_sni" placeholder="sni" data-group="tls" />
-    <input id="f_realityDest" placeholder="reality dest (如 www.cloudflare.com:443)" data-group="reality" />
+    <input id="f_realityDest" placeholder="reality dest (如 addons.mozilla.org:443)" data-group="reality" />
     <input id="f_shortId" placeholder="shortId" data-group="reality" />
 
     <input id="f_privateKey" placeholder="privateKey" data-group="reality" />
@@ -157,7 +160,7 @@
 <script>
 const $=id=>document.getElementById(id);
 let all=[],editId=null,forceReset=false;
-const sniPool=['www.cloudflare.com','www.microsoft.com','www.apple.com','www.bing.com','www.amazon.com'];
+const sniPool=['addons.mozilla.org','www.icloud.com','www.lovelive-anime.jp','icloud.cdn-apple.com','swdist.apple.com','www.microsoft.com','www.apple.com','www.bing.com','www.amazon.com'];
 const q=$('q'), list=$('list'), cv=$('cv'), mt=$('mt'), login=$('login'), app=$('app'), lu=$('lu'), lp=$('lp'), le=$('le');
 const qrModal=$('qrModal'), qrImg=$('qrImg'), qrLink=$('qrLink'), sp=$('sp'), sx=$('sx'), si=$('si');
 const fwList=$('fw_list'), fwListen=$('fw_listen'), fwProtocol=$('fw_protocol'), fwTargetHost=$('fw_target_host'), fwTargetPort=$('fw_target_port'), fwRemark=$('fw_remark');

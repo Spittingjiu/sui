@@ -27278,7 +27278,7 @@ function buildInbound(form = {}) {
   if (network === "ws") stream.wsSettings = { path: form.path || "/", headers: { Host: form.host || "" } };
   if (network === "tcp") stream.tcpSettings = { acceptProxyProtocol: false, header: { type: "none" } };
   if (security === "tls") stream.tlsSettings = { serverName: form.sni || "", certificates: [] };
-  if (security === "reality") stream.realitySettings = { show: false, dest: form.realityDest || "www.cloudflare.com:443", xver: 0, serverNames: [form.sni || "www.cloudflare.com"], privateKey: form.privateKey || "", shortIds: [form.shortId || ""] };
+  if (security === "reality") stream.realitySettings = { show: false, dest: form.realityDest || "addons.mozilla.org:443", xver: 0, serverNames: [form.sni || "addons.mozilla.org"], privateKey: form.privateKey || "", shortIds: [form.shortId || ""] };
   return normalizeInbound({
     up: 0,
     down: 0,
@@ -27755,7 +27755,7 @@ app.post("/api/inbounds/add-reality-quick", async (req, res) => {
   const privateKey = (keyOut.match(/Private(?:\s*key|Key):\s*([^\n\r]+)/i) || [, ""])[1].trim();
   const publicKey = (keyOut.match(/(?:Public\s*key|Password):\s*([^\n\r]+)/i) || [, ""])[1].trim();
   const shortId = import_crypto.default.randomBytes(8).toString("hex");
-  const pickedSni = String(req.body?.sni || "www.cloudflare.com");
+  const pickedSni = String(req.body?.sni || "addons.mozilla.org");
   const payload = buildInbound({
     protocol: "vless",
     network: "tcp",
@@ -27919,7 +27919,7 @@ function buildLinksForInbound(ib, reqHeaders = {}) {
     const rawHost = reqHeaders["x-forwarded-host"] || reqHeaders.host || "sui.wuhai.eu.org";
     host = String(rawHost).split(",")[0].trim().replace(/:\d+$/, "");
   }
-  const sni = stream?.tlsSettings?.serverName || stream?.realitySettings?.serverNames?.[0] || "www.cloudflare.com";
+  const sni = stream?.tlsSettings?.serverName || stream?.realitySettings?.serverNames?.[0] || "addons.mozilla.org";
   const network = stream?.network || "tcp";
   const security = stream?.security || "none";
   const pth = stream?.wsSettings?.path || "/";
