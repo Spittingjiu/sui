@@ -101,7 +101,7 @@
   <div class="grid" style="margin-top:8px">
     <input id="f_remark" placeholder="备注" />
     <input id="f_port" placeholder="端口" />
-    <select id="f_protocol"><option>vless</option><option>vmess</option><option>trojan</option><option>shadowsocks</option></select>
+    <select id="f_protocol"><option>vless</option><option>vmess</option><option>trojan</option><option>shadowsocks</option><option value="forward">port-forward</option></select>
 
     <select id="f_network"><option>tcp</option><option>ws</option></select>
     <select id="f_security"><option>none</option><option>tls</option><option>reality</option></select>
@@ -122,10 +122,10 @@
     <input id="f_privateKey" placeholder="privateKey" data-group="reality" />
     <input id="f_publicKey" placeholder="publicKey(展示用)" data-group="reality" />
 
-    <div class="row" style="grid-column:1/-1;margin-top:2px"><span class="muted">端口转发（可选，集成到新增节点）</span></div>
-    <select id="f_forward_protocol" style="width:120px"><option value="tcp">转发协议 TCP</option><option value="udp">转发协议 UDP</option></select>
-    <input id="f_forward_target_host" placeholder="转发目标IP/域名（可选）" />
-    <input id="f_forward_target_port" placeholder="转发目标端口（可选）" />
+    <div class="row" data-group="forward" style="grid-column:1/-1;margin-top:2px"><span class="muted">端口转发（选择协议为 port-forward 时生效）</span></div>
+    <select id="f_forward_protocol" data-group="forward" style="width:120px"><option value="tcp">转发协议 TCP</option><option value="udp">转发协议 UDP</option></select>
+    <input id="f_forward_target_host" data-group="forward" placeholder="转发目标IP/域名" />
+    <input id="f_forward_target_port" data-group="forward" placeholder="转发目标端口" />
 
   </div>
   <div class="row" style="margin-top:10px">
@@ -185,7 +185,7 @@ async function copyLink(id){const r=await api('/api/inbounds/'+id+'/links');if(!
 async function showQR(id){const r=await api('/api/inbounds/'+id+'/qr');if(!r.success)return alert(r.msg||'失败');qrImg.src=r.obj.qrDataUrl||r.obj.qrUrl||'';qrLink.value=r.obj.link||'';qrModal.classList.add('show')}
 
 function setVis(el,show){el.style.display=show?'':'none'}
-function tune(){const p=f_protocol.value,n=f_network.value;if(p==='shadowsocks'){f_security.value='none';f_security.disabled=true;}else{f_security.disabled=false;}const s=f_security.value;const sh={uuid:(p==='vless'||p==='vmess'),password:(p==='trojan'||p==='shadowsocks'),method:(p==='shadowsocks'),flow:(p==='vless'),ws:(n==='ws'),tls:(s==='tls'||s==='reality'),reality:(s==='reality')};document.querySelectorAll('[data-group]').forEach(el=>setVis(el,!!sh[el.dataset.group]))}
+function tune(){const p=f_protocol.value,n=f_network.value;const isForward=p==='forward';if(p==='shadowsocks'||isForward){f_security.value='none';f_security.disabled=true;}else{f_security.disabled=false;}f_network.disabled=isForward;const s=f_security.value;const sh={uuid:(p==='vless'||p==='vmess'),password:(p==='trojan'||p==='shadowsocks'),method:(p==='shadowsocks'),flow:(p==='vless'),ws:(!isForward&&n==='ws'),tls:(!isForward&&(s==='tls'||s==='reality')),reality:(!isForward&&s==='reality'),forward:isForward};document.querySelectorAll('[data-group]').forEach(el=>setVis(el,!!sh[el.dataset.group]))}
 function genUUID(){f_uuid.value=(crypto.randomUUID?crypto.randomUUID():'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx').replace(/[xy]/g,c=>{const r=Math.random()*16|0,v=c==='x'?r:(r&0x3|0x8);return v.toString(16)})}
 function randSni(){const s=sniPool[Math.floor(Math.random()*sniPool.length)];f_sni.value=s;if(f_security.value==='reality')f_realityDest.value=s+':443'}
 async function genReality(){const r=await api('/api/system/xray/reality-gen');if(!r.success)return alert(r.msg||'失败');f_privateKey.value=r.obj.privateKey||'';f_publicKey.value=r.obj.publicKey||'';f_shortId.value=r.obj.shortId||'';if(!f_sni.value)randSni();if(!f_uuid.value)genUUID();if(!f_flow.value)f_flow.value='xtls-rprx-vision'}
@@ -193,7 +193,7 @@ async function openAdd(){editId=null;mt.textContent='新增节点';modal.classLi
 function fill(n){const st=JSON.parse(n.settings||'{}'),ss=JSON.parse(n.streamSettings||'{}'),c=(st.clients||[])[0]||{};f_remark.value=n.remark||'';f_port.value=n.port||'';f_protocol.value=n.protocol||'vless';f_network.value=ss.network||'tcp';f_security.value=ss.security||'none';f_email.value=c.email||'';f_uuid.value=c.id||'';f_password.value=c.password||'';f_method.value=c.method||'aes-128-gcm';f_flow.value=c.flow||'';f_path.value=ss.wsSettings?.path||'/';f_host.value=ss.wsSettings?.headers?.Host||'';f_sni.value=ss.tlsSettings?.serverName||ss.realitySettings?.serverNames?.[0]||'';f_realityDest.value=ss.realitySettings?.dest||'';f_shortId.value=(ss.realitySettings?.shortIds||[])[0]||'';f_privateKey.value=ss.realitySettings?.privateKey||'';f_publicKey.value='';tune()}
 async function openEdit(id){const n=all.find(x=>x.id===id);if(!n)return;editId=id;mt.textContent='编辑节点';modal.classList.add('show');fill(n)}
 function closeM(){modal.classList.remove('show')}
-async function submitAdd(){const b={remark:f_remark.value,port:f_port.value,protocol:f_protocol.value,network:f_network.value,security:f_security.value,email:f_email.value,uuid:f_uuid.value,password:f_password.value,method:f_method.value,flow:f_flow.value,path:f_path.value,host:f_host.value,sni:f_sni.value,realityDest:f_realityDest.value,shortId:f_shortId.value,privateKey:f_privateKey.value};const url=editId?('/api/inbounds/'+editId+'/full'):'/api/inbounds/add';const m=editId?'PUT':'POST';const r=await api(url,{method:m,body:JSON.stringify(b)});if(!r.success)return alert(r.msg||'失败');if(!editId){const targetHost=(fForwardTargetHost.value||'').trim(),targetPort=Number(fForwardTargetPort.value||0);if(targetHost&&targetPort){const fr=await api('/api/forwards',{method:'POST',body:JSON.stringify({listenPort:Number(f_port.value||0),targetHost,targetPort,protocol:(fForwardProtocol.value||'tcp'),remark:(f_remark.value||'')})});if(!fr.success)return alert('节点已创建，但端口转发创建失败：'+(fr.msg||'unknown'));}}closeM();loadData()}
+async function submitAdd(){const proto=f_protocol.value;if(proto==='forward'){const listenPort=Number(f_port.value||0),targetHost=(fForwardTargetHost.value||'').trim(),targetPort=Number(fForwardTargetPort.value||0),protocol=(fForwardProtocol.value||'tcp');if(!listenPort||!targetHost||!targetPort)return alert('请填写监听端口/目标IP/目标端口');const fr=await api('/api/forwards',{method:'POST',body:JSON.stringify({listenPort,targetHost,targetPort,protocol,remark:(f_remark.value||'')})});if(!fr.success)return alert(fr.msg||'端口转发创建失败');closeM();alert('端口转发创建成功');return;}const b={remark:f_remark.value,port:f_port.value,protocol:proto,network:f_network.value,security:f_security.value,email:f_email.value,uuid:f_uuid.value,password:f_password.value,method:f_method.value,flow:f_flow.value,path:f_path.value,host:f_host.value,sni:f_sni.value,realityDest:f_realityDest.value,shortId:f_shortId.value,privateKey:f_privateKey.value};const url=editId?('/api/inbounds/'+editId+'/full'):'/api/inbounds/add';const m=editId?'PUT':'POST';const r=await api(url,{method:m,body:JSON.stringify(b)});if(!r.success)return alert(r.msg||'失败');closeM();loadData()}
 function randomNodeName(){const a=['sunny','lucky','silver','gentle','swift','quiet','stellar','autumn','velvet','amber'];const b=['bridge','garden','harbor','forest','island','comet','breeze','valley','summit','oasis'];return `${a[Math.floor(Math.random()*a.length)]}-${b[Math.floor(Math.random()*b.length)]}`;}
 async function quickReality(){const def=randomNodeName();const remark=prompt('备注',def);if(remark===null)return;const finalName=(remark||'').trim()||def;const r=await api('/api/inbounds/add-reality-quick',{method:'POST',body:JSON.stringify({remark:finalName})});if(!r.success)return alert(r.msg||'失败');loadData();alert('创建成功')}
 function applyNodeSpeedPreset(){f_protocol.value='vless';f_network.value='tcp';f_security.value='reality';if(!f_flow.value)f_flow.value='xtls-rprx-vision';if(!f_sni.value)randSni();if(!f_realityDest.value&&f_sni.value)f_realityDest.value=f_sni.value+':443';if(!f_uuid.value)genUUID();tune();alert('已应用推荐参数')}
