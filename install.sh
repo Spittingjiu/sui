@@ -14,6 +14,7 @@ CONTAINER_NAME="sui-panel"
 BIN_URL="https://raw.githubusercontent.com/Spittingjiu/sui/main/dist/sui-panel-full-linux-amd64"
 SERVER_URL="https://raw.githubusercontent.com/Spittingjiu/sui/main/server.mjs"
 PANEL_INDEX_URL="https://raw.githubusercontent.com/Spittingjiu/sui/main/public/index.html"
+REPO_API_URL="https://api.github.com/repos/Spittingjiu/sui/commits/main"
 PANEL_TAR_URL="https://cui.wuhai.eu.org/sui-panel.tar.gz"
 BACKUP_ROOT="/var/lib/sui-installer"
 BACKUP_DIR="$BACKUP_ROOT/backup"
@@ -132,6 +133,24 @@ EOT
     fi
   fi
 }
+
+fetch_latest_commit(){
+  curl -fsSL "$REPO_API_URL" | sed -n 's/^[[:space:]]*"sha": "\([a-f0-9]\{40\}\)".*/\1/p' | head -n1
+}
+
+write_version_meta(){
+  local action="${1:-install}" commit=""
+  commit=$(fetch_latest_commit || true)
+  cat > "$APP_DIR/VERSION" <<EOF
+source=github-main
+action=$action
+commit=${commit:-unknown}
+updated_at=$(date -Iseconds)
+binary_sha256=$(sha256sum "$APP_DIR/sui-panel-bin" 2>/dev/null | awk '{print $1}')
+server_sha256=$(sha256sum "$APP_DIR/server.mjs" 2>/dev/null | awk '{print $1}')
+index_sha256=$(sha256sum "$APP_DIR/public/index.html" 2>/dev/null | awk '{print $1}')
+EOF
+}
 install_xray_if_needed(){
   if [[ ! -x /usr/local/bin/xray ]]; then
     log "安装 Xray core..."
@@ -181,8 +200,11 @@ setup_binary_mode(){
     cp -f "$tmp/sui-panel/public/index.html" "$APP_DIR/public/index.html"
     rm -rf "$tmp"
   else
-    curl -fL --retry 3 -o "$APP_DIR/public/index.html" "$PANEL_INDEX_URL"
+    if ! curl -fL --retry 3 -o "$APP_DIR/public/index.html" "$PANEL_INDEX_URL?t=$(date +%s)"; then
+      warn "GitHub 获取前端失败，保留现有前端文件"
+    fi
   fi
+  write_version_meta install
   cat > "/etc/systemd/system/${SERVICE_NAME}.service" <<EOF
 [Unit]
 Description=SUI Panel (Binary)
@@ -213,12 +235,45 @@ BIN_PATH=/opt/sui-panel/sui-panel-bin
 BIN_URL=https://raw.githubusercontent.com/Spittingjiu/sui/main/dist/sui-panel-full-linux-amd64
 SERVER_URL=https://raw.githubusercontent.com/Spittingjiu/sui/main/server.mjs
 PANEL_INDEX_URL=https://raw.githubusercontent.com/Spittingjiu/sui/main/public/index.html
+REPO_API_URL=https://api.github.com/repos/Spittingjiu/sui/commits/main
 PANEL_TAR_URL=https://cui.wuhai.eu.org/sui-panel.tar.gz
 INSTALL_URL=https://raw.githubusercontent.com/Spittingjiu/sui/main/install.sh
 MENU_SOURCE=/opt/sui-panel/sui-menu.sh
 
 set_kv(){ k="$1"; v="$2"; grep -q "^${k}=" "$ENV_FILE" 2>/dev/null && sed -i "s#^${k}=.*#${k}=${v}#" "$ENV_FILE" || echo "${k}=${v}" >> "$ENV_FILE"; }
 reload_apply(){ systemctl daemon-reload; systemctl restart "$SERVICE"; }
+
+fetch_latest_commit(){
+  curl -fsSL "$REPO_API_URL" | sed -n 's/^[[:space:]]*"sha": "\([a-f0-9]\{40\}\)".*/\1/p' | head -n1
+}
+
+write_version_meta(){
+  local action="${1:-update}" commit=""
+  commit=$(fetch_latest_commit || true)
+  cat > /opt/sui-panel/VERSION <<EOV
+source=github-main
+action=$action
+commit=${commit:-unknown}
+updated_at=$(date -Iseconds)
+binary_sha256=$(sha256sum "$BIN_PATH" 2>/dev/null | awk '{print $1}')
+server_sha256=$(sha256sum /opt/sui-panel/server.mjs 2>/dev/null | awk '{print $1}')
+index_sha256=$(sha256sum /opt/sui-panel/public/index.html 2>/dev/null | awk '{print $1}')
+EOV
+}
+
+show_current_version(){
+  echo "--- 当前版本信息 ---"
+  if [[ -s /opt/sui-panel/VERSION ]]; then
+    cat /opt/sui-panel/VERSION
+  else
+    echo "VERSION 文件不存在（可先执行一次 4) 更新 SUI）"
+  fi
+  echo
+  echo "本地文件时间:"
+  stat -c 'sui-panel-bin: %y' "$BIN_PATH" 2>/dev/null || true
+  stat -c 'server.mjs:   %y' /opt/sui-panel/server.mjs 2>/dev/null || true
+  stat -c 'index.html:   %y' /opt/sui-panel/public/index.html 2>/dev/null || true
+}
 
 extract_remote_menu(){
   local remote="$1" out="$2"
@@ -264,9 +319,12 @@ update_sui_bin(){
     [ -f "$work/sui-panel/server.mjs" ] && cp -f "$work/sui-panel/server.mjs" /opt/sui-panel/server.mjs
     [ -f "$work/sui-panel/public/index.html" ] && cp -f "$work/sui-panel/public/index.html" /opt/sui-panel/public/index.html
   else
-    curl -fL --retry 3 -o /opt/sui-panel/public/index.html "$PANEL_INDEX_URL"
+    if ! curl -fL --retry 3 -o /opt/sui-panel/public/index.html "$PANEL_INDEX_URL?t=$(date +%s)"; then
+      echo "GitHub index.html 拉取失败，保留现有前端"
+    fi
   fi
 
+  write_version_meta update
   install -m 0755 /usr/local/bin/sui /opt/sui-panel/sui-menu.sh 2>/dev/null || true
   rm -rf "$work"
   systemctl restart "$SERVICE"
@@ -316,6 +374,7 @@ while true; do
   echo "8) 系统网络栈优化"
   echo "9) 一键应用全部优化(6+7+8)"
   echo "10) 检查并更新 SUI 菜单"
+  echo "11) 显示当前版本"
   echo "0) 退出"
   read -r -p "选择: " c
   case "$c" in
@@ -351,6 +410,9 @@ while true; do
       echo "--- SUI 状态 ---"
       mode=$(cat /etc/sui-panel.mode 2>/dev/null || echo unknown)
       echo "安装模式: $mode"
+      if [[ -s /opt/sui-panel/VERSION ]]; then
+        echo "版本摘要: $(grep '^commit=' /opt/sui-panel/VERSION | cut -d= -f2 | cut -c1-12)"
+      fi
       echo
       if [[ "$mode" == "docker" ]] || docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^sui-panel$'; then
         echo "[Docker 容器]"
@@ -372,6 +434,7 @@ while true; do
     8) opt_sysctl; echo "已应用网络栈优化"; read -r -p "回车继续" ;;
     9) opt_bbr; opt_dns; opt_sysctl; echo "已应用全部优化"; read -r -p "回车继续" ;;
     10) self_update_menu; read -r -p "回车继续" ;;
+    11) show_current_version; read -r -p "回车继续" ;;
     0) exit 0 ;;
   esac
 done
