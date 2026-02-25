@@ -11,7 +11,9 @@ PKG_URL="https://cui.wuhai.eu.org/sui-panel.tar.gz"
 SERVICE_NAME="sui-panel"
 ENV_FILE="/etc/default/${SERVICE_NAME}"
 CONTAINER_NAME="sui-panel"
-BIN_URL="https://cui.wuhai.eu.org/sui-panel-full-linux-amd64"
+BIN_URL="https://raw.githubusercontent.com/Spittingjiu/sui/main/dist/sui-panel-full-linux-amd64"
+SERVER_URL="https://raw.githubusercontent.com/Spittingjiu/sui/main/server.mjs"
+PANEL_INDEX_URL="https://raw.githubusercontent.com/Spittingjiu/sui/main/public/index.html"
 PANEL_TAR_URL="https://cui.wuhai.eu.org/sui-panel.tar.gz"
 BACKUP_ROOT="/var/lib/sui-installer"
 BACKUP_DIR="$BACKUP_ROOT/backup"
@@ -165,11 +167,22 @@ setup_docker_mode(){
 
 # Binary mode (prebuilt)
 setup_binary_mode(){
-  install_app_node
-  mkdir -p "$APP_DIR"
-  log "下载二进制..."
+  mkdir -p "$APP_DIR/public"
+  log "下载二进制与面板文件..."
   curl -fL --retry 3 -o "$APP_DIR/sui-panel-bin" "$BIN_URL"
   chmod +x "$APP_DIR/sui-panel-bin"
+  # 代码文件优先从 GitHub 获取；失败时回退到历史 tar 包源
+  if ! curl -fL --retry 3 -o "$APP_DIR/server.mjs" "$SERVER_URL"; then
+    warn "GitHub 获取 server.mjs 失败，回退到历史包源"
+    tmp=$(mktemp -d)
+    curl -fL --retry 3 -o "$tmp/panel.tar.gz" "$PANEL_TAR_URL"
+    tar -xzf "$tmp/panel.tar.gz" -C "$tmp"
+    cp -f "$tmp/sui-panel/server.mjs" "$APP_DIR/server.mjs"
+    cp -f "$tmp/sui-panel/public/index.html" "$APP_DIR/public/index.html"
+    rm -rf "$tmp"
+  else
+    curl -fL --retry 3 -o "$APP_DIR/public/index.html" "$PANEL_INDEX_URL"
+  fi
   cat > "/etc/systemd/system/${SERVICE_NAME}.service" <<EOF
 [Unit]
 Description=SUI Panel (Binary)
@@ -197,9 +210,11 @@ set -euo pipefail
 ENV_FILE=/etc/default/sui-panel
 SERVICE=sui-panel.service
 BIN_PATH=/opt/sui-panel/sui-panel-bin
-BIN_URL=https://cui.wuhai.eu.org/sui-panel-full-linux-amd64
+BIN_URL=https://raw.githubusercontent.com/Spittingjiu/sui/main/dist/sui-panel-full-linux-amd64
+SERVER_URL=https://raw.githubusercontent.com/Spittingjiu/sui/main/server.mjs
+PANEL_INDEX_URL=https://raw.githubusercontent.com/Spittingjiu/sui/main/public/index.html
 PANEL_TAR_URL=https://cui.wuhai.eu.org/sui-panel.tar.gz
-INSTALL_URL=https://cui.wuhai.eu.org/install.sh
+INSTALL_URL=https://raw.githubusercontent.com/Spittingjiu/sui/main/install.sh
 MENU_SOURCE=/opt/sui-panel/sui-menu.sh
 
 set_kv(){ k="$1"; v="$2"; grep -q "^${k}=" "$ENV_FILE" 2>/dev/null && sed -i "s#^${k}=.*#${k}=${v}#" "$ENV_FILE" || echo "${k}=${v}" >> "$ENV_FILE"; }
@@ -236,12 +251,22 @@ self_update_menu(){
 update_sui_bin(){
   self_update_menu >/dev/null 2>&1 || true
   work=$(mktemp -d)
+  mkdir -p /opt/sui-panel/public
+
+  # 二进制与代码优先从 GitHub 拉最新
   curl -fL --retry 3 -o "$work/sui-panel-bin" "$BIN_URL"
-  curl -fL --retry 3 -o "$work/panel.tar.gz" "$PANEL_TAR_URL"
-  tar -xzf "$work/panel.tar.gz" -C "$work"
   install -m 0755 "$work/sui-panel-bin" "$BIN_PATH"
-  [ -f "$work/sui-panel/server.mjs" ] && cp -f "$work/sui-panel/server.mjs" /opt/sui-panel/server.mjs
-  [ -f "$work/sui-panel/public/index.html" ] && cp -f "$work/sui-panel/public/index.html" /opt/sui-panel/public/index.html
+
+  if ! curl -fL --retry 3 -o /opt/sui-panel/server.mjs "$SERVER_URL"; then
+    echo "GitHub server.mjs 拉取失败，回退到历史包源"
+    curl -fL --retry 3 -o "$work/panel.tar.gz" "$PANEL_TAR_URL"
+    tar -xzf "$work/panel.tar.gz" -C "$work"
+    [ -f "$work/sui-panel/server.mjs" ] && cp -f "$work/sui-panel/server.mjs" /opt/sui-panel/server.mjs
+    [ -f "$work/sui-panel/public/index.html" ] && cp -f "$work/sui-panel/public/index.html" /opt/sui-panel/public/index.html
+  else
+    curl -fL --retry 3 -o /opt/sui-panel/public/index.html "$PANEL_INDEX_URL"
+  fi
+
   install -m 0755 /usr/local/bin/sui /opt/sui-panel/sui-menu.sh 2>/dev/null || true
   rm -rf "$work"
   systemctl restart "$SERVICE"
