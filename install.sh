@@ -316,6 +316,42 @@ EOT
 sysctl --system >/dev/null
 }
 
+setup_panel_https_proxy(){
+  local domain cert_file key_file panel_port caddyfile
+  domain="$1"
+  cert_file="$2"
+  key_file="$3"
+  panel_port=$(grep -E '^PORT=' "$ENV_FILE" 2>/dev/null | tail -n1 | cut -d= -f2-)
+  panel_port=${panel_port:-8810}
+
+  if ! command -v caddy >/dev/null 2>&1; then
+    apt-get update && apt-get install -y caddy
+  fi
+
+  # 若已有 Web 服务占用 80/443，先停止，避免 Caddy 启动失败
+  systemctl stop nginx apache2 httpd >/dev/null 2>&1 || true
+
+  caddyfile=/etc/caddy/Caddyfile
+  cat > "$caddyfile" <<EOC
+${domain} {
+    tls ${cert_file} ${key_file}
+    encode gzip
+    reverse_proxy 127.0.0.1:${panel_port}
+}
+
+http://${domain} {
+    redir https://${domain}{uri} 308
+}
+EOC
+
+  # 让 caddy 用户可读私钥
+  chgrp caddy "$key_file" >/dev/null 2>&1 || true
+  chmod 640 "$key_file" >/dev/null 2>&1 || true
+
+  systemctl enable --now caddy
+  systemctl restart caddy
+}
+
 issue_tls_cert_and_apply(){
   local domain email acme cert_dir cert_file key_file
   read -r -p "请输入证书域名（如: node.zzao.de）: " domain
@@ -393,10 +429,14 @@ PY
     systemctl restart sui-xray-core.service >/dev/null 2>&1 || true
   fi
 
-  echo "证书已完成："
+  echo "正在配置面板 HTTPS 入口（Caddy 反代到面板端口）..."
+  setup_panel_https_proxy "$domain" "$cert_file" "$key_file"
+
+  echo "证书与面板 HTTPS 已完成："
   echo "  cert: $cert_file"
   echo "  key : $key_file"
   echo "已自动写入 /etc/sui-xray/config.json 中所有 TLS 入站（若存在）并重启 xray。"
+  echo "面板访问地址: https://${domain}/"
 }
 
 while true; do
@@ -410,7 +450,7 @@ while true; do
   echo "7) DNS 优化"
   echo "8) 系统网络栈优化"
   echo "9) 一键应用全部优化(6+7+8)"
-  echo "10) 一键申请证书并自动配置(TLS, 无需Nginx)"
+  echo "10) 一键SSL（申请证书 + Xray TLS + 面板HTTPS）"
   echo "11) 检查并更新 SUI 菜单"
   echo "12) 显示当前版本"
   echo "0) 退出"
