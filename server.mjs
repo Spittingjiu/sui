@@ -168,20 +168,48 @@ function writeState() {
   fs.writeFileSync(DATA_FILE, JSON.stringify(state, null, 2));
 }
 
+function shellQ(v) {
+  return `'${String(v).replace(/'/g, `'"'"'`)}'`;
+}
+
+function toRuntimeInbound(ib) {
+  const o = {
+    tag: ib.tag || `in-${ib.id}`,
+    listen: ib.listen || undefined,
+    port: Number(ib.port),
+    protocol: ib.protocol,
+    settings: parseJ(ib.settings, {}),
+    streamSettings: parseJ(ib.streamSettings, {}),
+    sniffing: parseJ(ib.sniffing, { enabled: true, destOverride: ['http', 'tls', 'quic'] })
+  };
+  if (!o.listen) delete o.listen;
+  return o;
+}
+
+function writeRenderedXrayConfigOnly() {
+  const cfg = renderXrayConfig();
+  fs.writeFileSync(XRAY_CONFIG, JSON.stringify(cfg, null, 2));
+  shell(`${XRAY_BIN} run -test -c ${XRAY_CONFIG}`);
+}
+
+function xrayApiAddInbound(ib) {
+  const tmpDir = fs.mkdtempSync('/tmp/sui-adi-');
+  const tmpFile = path.join(tmpDir, 'inbound.json');
+  fs.writeFileSync(tmpFile, JSON.stringify(toRuntimeInbound(ib), null, 2));
+  try {
+    shell(`${XRAY_BIN} api adi --server=127.0.0.1:10085 ${shellQ(tmpFile)}`);
+  } finally {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+  }
+}
+
+function xrayApiRemoveInboundByTag(tag) {
+  if (!tag) return;
+  shell(`${XRAY_BIN} api rmi --server=127.0.0.1:10085 ${shellQ(tag)}`);
+}
+
 function renderXrayConfig() {
-  const inbounds = state.inbounds.filter(x => x.enable).map((ib) => {
-    const o = {
-      tag: ib.tag || `in-${ib.id}`,
-      listen: ib.listen || undefined,
-      port: Number(ib.port),
-      protocol: ib.protocol,
-      settings: parseJ(ib.settings, {}),
-      streamSettings: parseJ(ib.streamSettings, {}),
-      sniffing: parseJ(ib.sniffing, { enabled: true, destOverride: ['http', 'tls', 'quic'] })
-    };
-    if (!o.listen) delete o.listen;
-    return o;
-  });
+  const inbounds = state.inbounds.filter(x => x.enable).map((ib) => toRuntimeInbound(ib));
 
   // xray api stats inlet (local only)
   inbounds.push({
@@ -194,7 +222,7 @@ function renderXrayConfig() {
 
   return {
     log: { loglevel: 'warning' },
-    api: { tag: 'api', services: ['StatsService'] },
+    api: { tag: 'api', services: ['StatsService', 'HandlerService'] },
     stats: {},
     policy: {
       levels: { '0': { statsUserUplink: true, statsUserDownlink: true } },
@@ -214,12 +242,35 @@ function renderXrayConfig() {
 }
 
 function applyAndRestart() {
-  const cfg = renderXrayConfig();
-  fs.writeFileSync(XRAY_CONFIG, JSON.stringify(cfg, null, 2));
-  // validate first
-  shell(`${XRAY_BIN} run -test -c ${XRAY_CONFIG}`);
+  writeRenderedXrayConfigOnly();
   try { shell(`systemctl restart ${XRAY_SERVICE}`); }
   catch { shell(`systemctl start ${XRAY_SERVICE}`); }
+}
+
+function applyHotAddOrRestart(ib) {
+  writeRenderedXrayConfigOnly();
+  try { xrayApiAddInbound(ib); }
+  catch { applyAndRestart(); }
+}
+
+function applyHotRemoveOrRestart(tag) {
+  writeRenderedXrayConfigOnly();
+  try { xrayApiRemoveInboundByTag(tag); }
+  catch { applyAndRestart(); }
+}
+
+function applyHotReplaceOrRestart(oldTag, newIb) {
+  writeRenderedXrayConfigOnly();
+  try {
+    if (oldTag && oldTag !== newIb.tag) xrayApiRemoveInboundByTag(oldTag);
+    else if (oldTag) {
+      // same tag but params changed: remove first then add
+      xrayApiRemoveInboundByTag(oldTag);
+    }
+    xrayApiAddInbound(newIb);
+  } catch {
+    applyAndRestart();
+  }
 }
 
 function applyBbrFq() {
@@ -423,7 +474,7 @@ app.post('/api/inbounds/add', async (req, res) => {
   payload.id = state.seq++;
   state.inbounds.push(payload);
   writeState();
-  applyAndRestart();
+  applyHotAddOrRestart(payload);
   res.json({ success: true, obj: payload });
 });
 app.post('/api/inbounds/add-reality-quick', async (req, res) => {
@@ -446,61 +497,91 @@ app.post('/api/inbounds/add-reality-quick', async (req, res) => {
   payload.id = state.seq++;
   state.inbounds.push(payload);
   writeState();
-  applyAndRestart();
+  applyHotAddOrRestart(payload);
   res.json({ success: true, obj: payload, extra: { privateKey, publicKey, shortId, port } });
 });
 app.put('/api/inbounds/:id', async (req, res) => {
   const id = Number(req.params.id);
   const target = state.inbounds.find(i => i.id === id);
   if (!target) return res.status(404).json({ success: false });
+  const old = JSON.parse(JSON.stringify(target));
   if (req.body.remark !== undefined) target.remark = String(req.body.remark);
   if (req.body.port !== undefined && String(req.body.port).trim()) target.port = Number(req.body.port);
-  writeState(); applyAndRestart();
+  writeState();
+  applyHotReplaceOrRestart(old.tag || `in-${id}`, target);
   res.json({ success: true, obj: target });
 });
 app.put('/api/inbounds/:id/full', async (req, res) => {
   const id = Number(req.params.id);
   const idx = state.inbounds.findIndex(i => i.id === id);
   if (idx < 0) return res.status(404).json({ success: false, msg: 'not found' });
+  const old = state.inbounds[idx];
   const payload = buildInbound(req.body || {});
   if (!payload.port) return res.status(400).json({ success: false, msg: 'port required' });
   payload.id = id;
-  payload.up = state.inbounds[idx].up || 0;
-  payload.down = state.inbounds[idx].down || 0;
-  payload.enable = req.body.enable !== undefined ? !!req.body.enable : state.inbounds[idx].enable;
+  payload.up = old.up || 0;
+  payload.down = old.down || 0;
+  payload.enable = req.body.enable !== undefined ? !!req.body.enable : old.enable;
   state.inbounds[idx] = payload;
   writeState();
   try {
-    applyAndRestart();
+    if (!old.enable && !payload.enable) {
+      writeRenderedXrayConfigOnly();
+    } else if (!old.enable && payload.enable) {
+      applyHotAddOrRestart(payload);
+    } else if (old.enable && !payload.enable) {
+      applyHotRemoveOrRestart(old.tag || `in-${id}`);
+    } else {
+      applyHotReplaceOrRestart(old.tag || `in-${id}`, payload);
+    }
     return res.json({ success: true, obj: payload });
   } catch (e) {
-    return res.json({ success: true, obj: payload, msg: '已保存，但重载 Xray 失败：' + (e?.message || 'unknown') });
+    return res.json({ success: true, obj: payload, msg: '已保存，但热更新失败并已回退重启：' + (e?.message || 'unknown') });
   }
 });
 app.post('/api/inbounds/:id/toggle', async (req, res) => {
   const id = Number(req.params.id);
   const target = state.inbounds.find(i => i.id === id);
   if (!target) return res.status(404).json({ success: false });
+  const oldEnable = !!target.enable;
   target.enable = !target.enable;
-  writeState(); applyAndRestart();
+  writeState();
+  if (oldEnable && !target.enable) applyHotRemoveOrRestart(target.tag || `in-${id}`);
+  else if (!oldEnable && target.enable) applyHotAddOrRestart(target);
+  else writeRenderedXrayConfigOnly();
   res.json({ success: true, obj: target });
 });
 app.delete('/api/inbounds/:id', async (req, res) => {
   const id = Number(req.params.id);
+  const old = state.inbounds.find(x => x.id === id);
   state.inbounds = state.inbounds.filter(x => x.id !== id);
-  writeState(); applyAndRestart();
+  writeState();
+  if (old?.enable) applyHotRemoveOrRestart(old.tag || `in-${id}`);
+  else writeRenderedXrayConfigOnly();
   res.json({ success: true });
 });
 app.post('/api/inbounds/batch-toggle', async (req, res) => {
   const { ids = [], enable } = req.body || {};
   const idset = new Set(ids.map(Number));
   const out = [];
+  const toAdd = [];
+  const toRemove = [];
   for (const item of state.inbounds) {
     if (!idset.has(item.id)) continue;
+    const prev = !!item.enable;
     item.enable = typeof enable === 'boolean' ? enable : !item.enable;
+    if (!prev && item.enable) toAdd.push(item);
+    if (prev && !item.enable) toRemove.push(item.tag || `in-${item.id}`);
     out.push({ id: item.id, success: true });
   }
-  writeState(); applyAndRestart();
+  writeState();
+  writeRenderedXrayConfigOnly();
+  try {
+    for (const tag of toRemove) xrayApiRemoveInboundByTag(tag);
+    for (const ib of toAdd) xrayApiAddInbound(ib);
+  } catch {
+    applyAndRestart();
+  }
   res.json({ success: true, obj: out });
 });
 
