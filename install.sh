@@ -83,7 +83,10 @@ backup_existing_state(){
     cp -a /etc/sui-xray/config.json "$BACKUP_DIR/etc-sui-xray/"
     has=1
   fi
-  [[ "$has" -eq 1 ]] && date -Iseconds > "$BACKUP_ROOT/created_at"
+  if [[ "$has" -eq 1 ]]; then
+    date -Iseconds > "$BACKUP_ROOT/created_at"
+  fi
+  return 0
 }
 
 restore_existing_state(){
