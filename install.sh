@@ -6,6 +6,15 @@ log(){ echo -e "${GREEN}[INFO]${NC} $*"; }
 warn(){ echo -e "${YELLOW}[WARN]${NC} $*"; }
 err(){ echo -e "${RED}[ERR ]${NC} $*"; }
 
+progress_step(){
+  local n="$1" total="$2" text="$3" width=24
+  local fill=$(( n * width / total ))
+  local empty=$(( width - fill ))
+  printf -v bar "%*s" "$fill" ""; bar=${bar// /█}
+  printf -v pad "%*s" "$empty" ""; pad=${pad// /·}
+  printf "[%s%s] %3d%% (%d/%d) %s\n" "$bar" "$pad" $(( n * 100 / total )) "$n" "$total" "$text"
+}
+
 on_err(){
   local ec=$?
   err "安装失败（exit=${ec}，line=${BASH_LINENO[0]}，cmd=${BASH_COMMAND}）"
@@ -40,13 +49,13 @@ apt_base(){
   export DEBIAN_FRONTEND=noninteractive
   dpkg --configure -a || true
   if command -v apt-get >/dev/null 2>&1; then
-    apt-get -f install -y || true
-    apt-get update
-    apt-get install -y curl ca-certificates rsync unzip socat nodejs npm
+    apt-get -f install -y >/dev/null 2>&1 || true
+    apt-get update -y >/dev/null
+    apt-get install -y curl ca-certificates rsync unzip socat nodejs npm >/dev/null
   elif command -v dnf >/dev/null 2>&1; then
-    dnf install -y curl ca-certificates rsync unzip socat
+    dnf install -y curl ca-certificates rsync unzip socat nodejs npm >/dev/null
   elif command -v yum >/dev/null 2>&1; then
-    yum install -y curl ca-certificates rsync unzip socat
+    yum install -y curl ca-certificates rsync unzip socat nodejs npm >/dev/null
   else
     err "未找到受支持的包管理器（apt-get/dnf/yum）"
     exit 1
@@ -139,7 +148,7 @@ install_xray_if_needed(){
     tag=$(curl -fsSL https://api.github.com/repos/XTLS/Xray-core/releases/latest | grep '"tag_name"' | head -n1 | sed -E 's/.*"([^"]+)".*/\1/')
     [[ -n "$tag" ]] || tag="v26.2.4"
     tmp=$(mktemp -d)
-    curl -fL --retry 3 -o "$tmp/xray.zip" "https://github.com/XTLS/Xray-core/releases/download/${tag}/Xray-linux-64.zip"
+    curl -fsSL --retry 3 -o "$tmp/xray.zip" "https://github.com/XTLS/Xray-core/releases/download/${tag}/Xray-linux-64.zip"
     unzip -o "$tmp/xray.zip" -d "$tmp" >/dev/null
     install -m 0755 "$tmp/xray" /usr/local/bin/xray
     rm -rf "$tmp"
@@ -157,17 +166,17 @@ setup_binary_mode(){
   local tmp_bin old_bin tmp
   tmp_bin=$(mktemp)
   old_bin="$APP_DIR/sui-panel-bin.old.$(date +%s)"
-  curl -fL --retry 3 -o "$tmp_bin" "$BIN_URL"
+  curl -fsSL --retry 3 -o "$tmp_bin" "$BIN_URL"
   [[ -f "$APP_DIR/sui-panel-bin" ]] && mv -f "$APP_DIR/sui-panel-bin" "$old_bin" 2>/dev/null || true
   install -m 0755 "$tmp_bin" "$APP_DIR/sui-panel-bin"
   rm -f "$tmp_bin"
   # 清理历史旧二进制，避免占盘（仅保留最近2个）
   ls -1t "$APP_DIR"/sui-panel-bin.old.* 2>/dev/null | awk 'NR>2' | xargs -r rm -f
 
-  if ! curl -fL --retry 3 -o "$APP_DIR/server.mjs" "$SERVER_URL"; then
+  if ! curl -fsSL --retry 3 -o "$APP_DIR/server.mjs" "$SERVER_URL"; then
     warn "GitHub 获取 server.mjs 失败，回退到历史包源"
     tmp=$(mktemp -d)
-    curl -fL --retry 3 -o "$tmp/panel.tar.gz" "$PANEL_TAR_URL"
+    curl -fsSL --retry 3 -o "$tmp/panel.tar.gz" "$PANEL_TAR_URL"
     tar -xzf "$tmp/panel.tar.gz" -C "$tmp"
     panel_root=$(dirname "$(find "$tmp" -maxdepth 3 -type f -name server.mjs | head -n1)")
     if [[ -n "${panel_root:-}" && -f "$panel_root/server.mjs" ]]; then
@@ -180,9 +189,9 @@ setup_binary_mode(){
     fi
     rm -rf "$tmp"
   else
-    curl -fL --retry 3 -o "$APP_DIR/public/index.html" "$PANEL_INDEX_URL?t=$(date +%s)" || warn "GitHub 获取前端失败，保留现有前端文件"
-    curl -fL --retry 3 -o "$APP_DIR/package.json" "$PANEL_PKG_URL?t=$(date +%s)" || warn "GitHub 获取 package.json 失败，保留现有文件"
-    curl -fL --retry 3 -o "$APP_DIR/package-lock.json" "$PANEL_LOCK_URL?t=$(date +%s)" || warn "GitHub 获取 package-lock.json 失败，保留现有文件"
+    curl -fsSL --retry 3 -o "$APP_DIR/public/index.html" "$PANEL_INDEX_URL?t=$(date +%s)" || warn "GitHub 获取前端失败，保留现有前端文件"
+    curl -fsSL --retry 3 -o "$APP_DIR/package.json" "$PANEL_PKG_URL?t=$(date +%s)" || warn "GitHub 获取 package.json 失败，保留现有文件"
+    curl -fsSL --retry 3 -o "$APP_DIR/package-lock.json" "$PANEL_LOCK_URL?t=$(date +%s)" || warn "GitHub 获取 package-lock.json 失败，保留现有文件"
   fi
 
   (cd "$APP_DIR" && npm install --omit=dev --no-audit --no-fund >/dev/null)
@@ -293,7 +302,7 @@ update_sui_bin(){
   local tmp_inst
   tmp_inst=$(mktemp)
   echo "正在拉取最新安装脚本..."
-  curl -fL --retry 3 -o "$tmp_inst" "$INSTALL_URL?t=$(date +%s)"
+  curl -fsSL --retry 3 -o "$tmp_inst" "$INSTALL_URL?t=$(date +%s)"
   echo "开始执行重装（会保留你现有配置，按提示选 Y）..."
   bash "$tmp_inst"
   rm -f "$tmp_inst"
@@ -409,7 +418,7 @@ issue_tls_cert_and_apply(){
   "$acme" --install-cert -d "$domain" --ecc \
     --fullchain-file "$cert_file" \
     --key-file "$key_file" \
-    --reloadcmd "systemctl restart sui-xray-core.service >/dev/null 2>&1 || true"
+    --reloadcmd "systemctl restart cui-xray-core.service >/dev/null 2>&1 || systemctl restart sui-xray-core.service >/dev/null 2>&1 || true"
 
   if [[ -s /etc/sui-xray/config.json ]]; then
     CERT_FILE="$cert_file" KEY_FILE="$key_file" python3 - <<'PY'
@@ -440,7 +449,7 @@ if changed:
         json.dump(cfg, f, ensure_ascii=False, indent=2)
 print('changed' if changed else 'no_tls_inbound')
 PY
-    systemctl restart sui-xray-core.service >/dev/null 2>&1 || true
+    systemctl restart cui-xray-core.service >/dev/null 2>&1 || systemctl restart sui-xray-core.service >/dev/null 2>&1 || true
   fi
 
   echo "正在配置面板 HTTPS 入口（Caddy 反代到面板端口）..."
@@ -488,8 +497,8 @@ while true; do
       echo "[sui-panel.service]"
       systemctl --no-pager status "$SERVICE" | sed -n '1,25p' || true
       echo
-      echo "[sui-xray-core.service]"
-      systemctl --no-pager status sui-xray-core.service | sed -n '1,25p' || true
+      echo "[cui-xray-core.service]"
+      systemctl --no-pager status cui-xray-core.service | sed -n '1,25p' || systemctl --no-pager status sui-xray-core.service | sed -n '1,25p' || true
       echo
       echo "[监听端口]"
       ss -lntp | grep -E ':8810|:443|:80' || true
@@ -510,33 +519,41 @@ chmod +x /usr/local/bin/sui
 }
 
 main(){
-  log "Step 1/7: 权限检查"
+  local total=7
+  progress_step 1 "$total" "权限检查"
   require_root
-  log "Step 2/7: 环境预检"
+  progress_step 2 "$total" "环境预检"
   preflight
-  log "Step 3/7: 备份旧配置"
+  progress_step 3 "$total" "备份旧配置"
   backup_existing_state
-  log "Step 4/7: 安装基础依赖"
+  progress_step 4 "$total" "安装基础依赖"
   apt_base
-  log "Step 5/7: 检查/安装 Xray"
+  progress_step 5 "$total" "检查/安装 Xray"
   install_xray_if_needed
-  log "Step 6/7: 写入默认环境配置"
+  progress_step 6 "$total" "写入默认环境配置"
   write_env
 
-  log "已固定为 Node 运行模式（支持热更新）"
+  progress_step 7 "$total" "部署面板并收尾"
   setup_binary_mode
   echo binary > /etc/sui-panel.mode
   restore_existing_state
   systemctl restart "$SERVICE_NAME" >/dev/null 2>&1 || true
-  systemctl restart sui-xray-core.service >/dev/null 2>&1 || true
+  systemctl restart cui-xray-core.service >/dev/null 2>&1 || systemctl restart sui-xray-core.service >/dev/null 2>&1 || true
   write_sui_cli
 
-  local effective_port
+  local effective_port panel_user panel_pass
   effective_port=$(grep -E '^PORT=' "$ENV_FILE" 2>/dev/null | tail -n1 | cut -d= -f2-)
   effective_port=${effective_port:-8810}
+  panel_user=$(grep -E '^PANEL_USER=' "$ENV_FILE" 2>/dev/null | tail -n1 | cut -d= -f2-)
+  panel_pass=$(grep -E '^PANEL_PASS=' "$ENV_FILE" 2>/dev/null | tail -n1 | cut -d= -f2-)
+  panel_user=${panel_user:-admin}
+  panel_pass=${panel_pass:-admin123}
 
+  echo
   log "安装完成 ✅"
-  echo "访问: http://<你的服务器IP>:${effective_port}"
+  echo "访问地址: https://<你的域名>/  或  http://<你的服务器IP>:${effective_port}"
+  echo "默认用户名: ${panel_user}"
+  echo "默认密码: ${panel_pass}"
   echo "提示: 如需修改端口，执行命令: sui -> 3) 修改面板端口"
 }
 
