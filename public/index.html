@@ -595,7 +595,7 @@
 <script>
 const $=id=>document.getElementById(id);
 let all=[],editId=null,forceReset=false;
-const sniPool=['www.lovelive-anime.jp'];
+const sniPool=['www.lovelive-anime.jp','addons.mozilla.org','www.icloud.com','www.microsoft.com','www.apple.com','www.bing.com','www.amazon.com'];
 const q=$('q'), list=$('list'), cv=$('cv'), mt=$('mt'), login=$('login'), app=$('app'), lu=$('lu'), lp=$('lp'), le=$('le');
 const qrModal=$('qrModal'), qrImg=$('qrImg'), qrLink=$('qrLink'), sp=$('sp'), sx=$('sx'), si=$('si');
 const fForwardProtocol=$('f_forward_protocol'), fForwardTargetHost=$('f_forward_target_host'), fForwardTargetPort=$('f_forward_target_port');
@@ -652,7 +652,7 @@ function tune(){const p=f_protocol.value,n=f_network.value;const isForward=p==='
 
 // 工具函数（保留原有逻辑）
 function genUUID(){f_uuid.value=(crypto.randomUUID?crypto.randomUUID():'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx').replace(/[xy]/g,c=>{const r=Math.random()*16|0,v=c==='x'?r:(r&0x3|0x8);return v.toString(16)})}
-function randSni(){const s='www.lovelive-anime.jp';f_sni.value=s;if(f_security.value==='reality')f_realityDest.value=s+':443'}
+function randSni(){const s=sniPool[Math.floor(Math.random()*sniPool.length)];f_sni.value=s;if(f_security.value==='reality')f_realityDest.value=s+':443'}
 async function genReality(){const r=await api('/api/system/xray/reality-gen');if(!r.success)return alert(r.msg||'生成 Reality 密钥失败');f_privateKey.value=r.obj.privateKey||'';f_publicKey.value=r.obj.publicKey||'';f_shortId.value=r.obj.shortId||'';if(!f_sni.value)randSni();if(!f_uuid.value)genUUID();if(!f_flow.value)f_flow.value='xtls-rprx-vision'}
 
 // 新增/编辑节点（保留原有逻辑）
@@ -666,7 +666,7 @@ async function submitAdd(){const proto=f_protocol.value;if(proto==='forward'){co
 
 // 一键 Reality（保留原有逻辑）
 function randomNodeName(){const a=['sunny','lucky','silver','gentle','swift','quiet','stellar','autumn','velvet','amber'];const b=['bridge','garden','harbor','forest','island','comet','breeze','valley','summit','oasis'];return `${a[Math.floor(Math.random()*a.length)]}-${b[Math.floor(Math.random()*b.length)]}`;}
-async function quickReality(){const def=randomNodeName();const remark=prompt('请输入节点备注',def);if(remark===null)return;const finalName=(remark||'').trim()||def;const r=await api('/api/inbounds/add-reality-quick',{method:'POST',body:JSON.stringify({remark:finalName,sni:'www.lovelive-anime.jp'})});if(!r.success)return alert(r.msg||'创建一键 Reality失败');loadData();alert('节点新建成功')}
+async function quickReality(){const def=randomNodeName();const remark=prompt('请输入节点备注',def);if(remark===null)return;const finalName=(remark||'').trim()||def;const sni=sniPool[Math.floor(Math.random()*sniPool.length)];const r=await api('/api/inbounds/add-reality-quick',{method:'POST',body:JSON.stringify({remark:finalName,sni})});if(!r.success)return alert(r.msg||'创建一键 Reality失败');loadData();alert('节点新建成功')}
 function applyNodeSpeedPreset(){f_protocol.value='vless';f_network.value='tcp';f_security.value='reality';if(!f_flow.value)f_flow.value='xtls-rprx-vision';if(!f_sni.value)randSni();if(!f_realityDest.value&&f_sni.value)f_realityDest.value=f_sni.value+':443';if(!f_uuid.value)genUUID();tune();alert('已应用推荐参数')}
 
 // 加载引擎信息（保留原有逻辑）

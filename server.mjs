@@ -13,7 +13,6 @@ const PANEL_SERVICE = process.env.PANEL_SERVICE || 'sui-panel.service';
 
 const DATA_DIR = '/opt/cui-panel';
 const DATA_FILE = path.join(DATA_DIR, 'inbounds.json');
-const FORWARDS_FILE = path.join(DATA_DIR, 'forwards.json');
 const PANEL_SETTINGS_FILE = path.join(DATA_DIR, 'panel-settings.json');
 const XRAY_DIR = '/etc/cui-xray';
 const XRAY_CONFIG = path.join(XRAY_DIR, 'config.json');
@@ -22,7 +21,6 @@ const XRAY_SERVICE = 'cui-xray-core.service';
 
 const sessions = new Map();
 let state = { seq: 1, inbounds: [] };
-let forwardsState = { seq: 1, rules: [] };
 let panelSettings = {
   username: process.env.PANEL_USER || 'admin',
   password: process.env.PANEL_PASS || 'admin123',
@@ -155,7 +153,7 @@ function buildInbound(form = {}) {
   if (network === 'ws') stream.wsSettings = { path: form.path || '/', headers: { Host: form.host || '' } };
   if (network === 'tcp') stream.tcpSettings = { acceptProxyProtocol: false, header: { type: 'none' } };
   if (security === 'tls') stream.tlsSettings = { serverName: form.sni || '', certificates: [] };
-  if (security === 'reality') stream.realitySettings = { show: false, dest: form.realityDest || 'addons.mozilla.org:443', xver: 0, serverNames: [form.sni || 'addons.mozilla.org'], privateKey: form.privateKey || '', shortIds: [form.shortId || ''] };
+  if (security === 'reality') stream.realitySettings = { show: false, dest: form.realityDest || 'www.cloudflare.com:443', xver: 0, serverNames: [form.sni || 'www.cloudflare.com'], privateKey: form.privateKey || '', shortIds: [form.shortId || ''] };
 
   return normalizeInbound({
     up: 0, down: 0, total: Number(form.total || 0), remark,
@@ -168,63 +166,6 @@ function buildInbound(form = {}) {
 
 function writeState() {
   fs.writeFileSync(DATA_FILE, JSON.stringify(state, null, 2));
-}
-
-function writeForwardsState() {
-  fs.writeFileSync(FORWARDS_FILE, JSON.stringify(forwardsState, null, 2));
-}
-
-function normalizeForwardRule(x = {}) {
-  const p = String(x.protocol || 'tcp').toLowerCase();
-  const protocol = (p === 'udp' || p === 'both') ? p : 'tcp';
-  return {
-    id: Number(x.id || 0),
-    listenPort: Number(x.listenPort || 0),
-    targetHost: String(x.targetHost || '').trim(),
-    targetPort: Number(x.targetPort || 0),
-    protocol,
-    enabled: x.enabled !== false,
-    remark: String(x.remark || '')
-  };
-}
-
-function unitNameByRule(rule) { return `sui-forward-${rule.id}.service`; }
-
-function renderForwardUnit(rule) {
-  let relay = '';
-  if (rule.protocol === 'udp') {
-    relay = `/usr/bin/socat -d -d UDP-RECVFROM:${rule.listenPort},fork,reuseaddr UDP-SENDTO:${rule.targetHost}:${rule.targetPort}`;
-  } else if (rule.protocol === 'both') {
-    relay = `/bin/bash -lc '/usr/bin/socat -d -d TCP-LISTEN:${rule.listenPort},fork,reuseaddr TCP:${rule.targetHost}:${rule.targetPort} & /usr/bin/socat -d -d UDP-RECVFROM:${rule.listenPort},fork,reuseaddr UDP-SENDTO:${rule.targetHost}:${rule.targetPort} & wait -n'`;
-  } else {
-    relay = `/usr/bin/socat -d -d TCP-LISTEN:${rule.listenPort},fork,reuseaddr TCP:${rule.targetHost}:${rule.targetPort}`;
-  }
-  return `[Unit]\nDescription=SUI Port Forward #${rule.id} (${rule.protocol.toUpperCase()} ${rule.listenPort} -> ${rule.targetHost}:${rule.targetPort})\nAfter=network.target\n\n[Service]\nType=simple\nExecStart=${relay}\nRestart=always\nRestartSec=1\nUser=root\n\n[Install]\nWantedBy=multi-user.target\n`;
-}
-
-function applyForwardRule(rule) {
-  const unit = unitNameByRule(rule);
-  const unitPath = `/etc/systemd/system/${unit}`;
-  fs.writeFileSync(unitPath, renderForwardUnit(rule));
-  shell('systemctl daemon-reload');
-  if (rule.enabled) shell(`systemctl enable --now ${unit}`);
-  else shell(`systemctl disable --now ${unit} || true`);
-}
-
-function removeForwardRule(rule) {
-  const unit = unitNameByRule(rule);
-  const unitPath = `/etc/systemd/system/${unit}`;
-  try { shell(`systemctl disable --now ${unit} || true`); } catch {}
-  if (fs.existsSync(unitPath)) fs.unlinkSync(unitPath);
-  try { shell('systemctl daemon-reload'); } catch {}
-}
-
-function refreshForwardStatus(rule) {
-  const unit = unitNameByRule(rule);
-  let active = 'inactive', enabled = 'disabled';
-  try { active = shell(`systemctl is-active ${unit}`); } catch {}
-  try { enabled = shell(`systemctl is-enabled ${unit}`); } catch {}
-  return { ...rule, service: unit, active, enabled };
 }
 
 function renderXrayConfig() {
@@ -354,51 +295,16 @@ function loadState() {
   loadPanelSettings();
   ensureCoreService();
   if (fs.existsSync(DATA_FILE)) {
-    try {
-      state = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-      state.seq ||= 1;
-      state.inbounds ||= [];
-    } catch {
-      const bad = `${DATA_FILE}.bad.${Date.now()}`;
-      try { fs.renameSync(DATA_FILE, bad); } catch {}
-      state = { seq: 1, inbounds: [] };
-      writeState();
-    }
-  } else {
-    const migrated = migrateFromXuiDb();
-    if (!migrated) state = { seq: 1, inbounds: [] };
-    writeState();
-  }
-
-  if (fs.existsSync(FORWARDS_FILE)) {
-    try {
-      forwardsState = JSON.parse(fs.readFileSync(FORWARDS_FILE, 'utf8'));
-      forwardsState.seq ||= 1;
-      forwardsState.rules = (forwardsState.rules || []).map(normalizeForwardRule).filter(r => r.id > 0);
-    } catch {
-      const bad = `${FORWARDS_FILE}.bad.${Date.now()}`;
-      try { fs.renameSync(FORWARDS_FILE, bad); } catch {}
-      forwardsState = { seq: 1, rules: [] };
-      writeForwardsState();
-    }
-  } else {
-    forwardsState = { seq: 1, rules: [] };
-    writeForwardsState();
-  }
-
-  for (const r of forwardsState.rules) {
-    try { applyForwardRule(r); } catch {}
-  }
-
-  try {
+    state = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+    state.seq ||= 1;
+    state.inbounds ||= [];
     applyAndRestart();
-  } catch {
-    const bad = `${DATA_FILE}.invalid.${Date.now()}`;
-    try { fs.renameSync(DATA_FILE, bad); } catch {}
-    state = { seq: 1, inbounds: [] };
-    writeState();
-    try { applyAndRestart(); } catch {}
+    return;
   }
+  const migrated = migrateFromXuiDb();
+  if (!migrated) state = { seq: 1, inbounds: [] };
+  writeState();
+  applyAndRestart();
 }
 
 function auth(req, res, next) {
@@ -478,71 +384,6 @@ app.post('/api/panel/change-password', (req, res) => {
   } catch (e) { res.status(500).json({ success: false, msg: e.message }); }
 });
 
-app.get('/api/forwards', (_req, res) => {
-  try {
-    const list = (forwardsState.rules || []).map(refreshForwardStatus);
-    res.json({ success: true, obj: list });
-  } catch (e) { res.status(500).json({ success: false, msg: e.message }); }
-});
-
-app.post('/api/forwards', (req, res) => {
-  try {
-    const listenPort = Number(req.body?.listenPort || 0);
-    const targetHost = String(req.body?.targetHost || '').trim();
-    const targetPort = Number(req.body?.targetPort || 0);
-    const p = String(req.body?.protocol || 'tcp').toLowerCase();
-    const protocol = (p === 'udp' || p === 'both') ? p : 'tcp';
-    const remark = String(req.body?.remark || '').trim();
-    if (!listenPort || listenPort < 1 || listenPort > 65535) return res.status(400).json({ success: false, msg: '监听端口无效' });
-    if (!targetHost) return res.status(400).json({ success: false, msg: '目标IP不能为空' });
-    if (!targetPort || targetPort < 1 || targetPort > 65535) return res.status(400).json({ success: false, msg: '目标端口无效' });
-
-    const overlap = (a, b) => {
-      const A = a === 'both' ? ['tcp', 'udp'] : [a];
-      const B = b === 'both' ? ['tcp', 'udp'] : [b];
-      return A.some(x => B.includes(x));
-    };
-    if (forwardsState.rules.some(x => Number(x.listenPort) === listenPort && overlap(String(x.protocol || 'tcp'), protocol))) {
-      return res.status(400).json({ success: false, msg: '监听端口与现有转发协议冲突' });
-    }
-    try { shell('command -v socat'); } catch { return res.status(400).json({ success: false, msg: '缺少依赖 socat，请先安装: apt-get install -y socat' }); }
-
-    const rule = normalizeForwardRule({
-      id: forwardsState.seq++, listenPort, targetHost, targetPort, protocol,
-      enabled: true, remark
-    });
-    forwardsState.rules.push(rule);
-    applyForwardRule(rule);
-    writeForwardsState();
-    res.json({ success: true, obj: refreshForwardStatus(rule), msg: '端口转发已创建' });
-  } catch (e) { res.status(500).json({ success: false, msg: e.message }); }
-});
-
-app.post('/api/forwards/:id/toggle', (req, res) => {
-  try {
-    const id = Number(req.params.id || 0);
-    const r = forwardsState.rules.find(x => x.id === id);
-    if (!r) return res.status(404).json({ success: false, msg: 'not found' });
-    r.enabled = !r.enabled;
-    applyForwardRule(r);
-    writeForwardsState();
-    res.json({ success: true, obj: refreshForwardStatus(r) });
-  } catch (e) { res.status(500).json({ success: false, msg: e.message }); }
-});
-
-app.delete('/api/forwards/:id', (req, res) => {
-  try {
-    const id = Number(req.params.id || 0);
-    const idx = forwardsState.rules.findIndex(x => x.id === id);
-    if (idx < 0) return res.status(404).json({ success: false, msg: 'not found' });
-    const r = forwardsState.rules[idx];
-    removeForwardRule(r);
-    forwardsState.rules.splice(idx, 1);
-    writeForwardsState();
-    res.json({ success: true });
-  } catch (e) { res.status(500).json({ success: false, msg: e.message }); }
-});
-
 function refreshInboundTraffic() {
   try {
     const out = shell(`${XRAY_BIN} api statsquery --server=127.0.0.1:10085 -pattern 'inbound>>>' 2>/dev/null || true`);
@@ -593,7 +434,7 @@ app.post('/api/inbounds/add-reality-quick', async (req, res) => {
   const privateKey = (keyOut.match(/Private(?:\s*key|Key):\s*([^\n\r]+)/i) || [,''])[1].trim();
   const publicKey = (keyOut.match(/(?:Public\s*key|Password):\s*([^\n\r]+)/i) || [,''])[1].trim();
   const shortId = crypto.randomBytes(8).toString('hex');
-  const pickedSni = String(req.body?.sni || 'addons.mozilla.org');
+  const pickedSni = String(req.body?.sni || 'www.cloudflare.com');
   const payload = buildInbound({
     protocol: 'vless', network: 'tcp', security: 'reality',
     port, remark: req.body?.remark || randomRemark('reality'),
@@ -628,8 +469,13 @@ app.put('/api/inbounds/:id/full', async (req, res) => {
   payload.down = state.inbounds[idx].down || 0;
   payload.enable = req.body.enable !== undefined ? !!req.body.enable : state.inbounds[idx].enable;
   state.inbounds[idx] = payload;
-  writeState(); applyAndRestart();
-  res.json({ success: true, obj: payload });
+  writeState();
+  try {
+    applyAndRestart();
+    return res.json({ success: true, obj: payload });
+  } catch (e) {
+    return res.json({ success: true, obj: payload, msg: '已保存，但重载 Xray 失败：' + (e?.message || 'unknown') });
+  }
 });
 app.post('/api/inbounds/:id/toggle', async (req, res) => {
   const id = Number(req.params.id);
@@ -725,7 +571,7 @@ function buildLinksForInbound(ib, reqHeaders = {}) {
     const rawHost = reqHeaders['x-forwarded-host'] || reqHeaders.host || 'sui.wuhai.eu.org';
     host = String(rawHost).split(',')[0].trim().replace(/:\d+$/, '');
   }
-  const sni = stream?.tlsSettings?.serverName || stream?.realitySettings?.serverNames?.[0] || 'addons.mozilla.org';
+  const sni = stream?.tlsSettings?.serverName || stream?.realitySettings?.serverNames?.[0] || 'www.cloudflare.com';
   const network = stream?.network || 'tcp';
   const security = stream?.security || 'none';
   const pth = stream?.wsSettings?.path || '/';
