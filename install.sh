@@ -6,6 +6,13 @@ log(){ echo -e "${GREEN}[INFO]${NC} $*"; }
 warn(){ echo -e "${YELLOW}[WARN]${NC} $*"; }
 err(){ echo -e "${RED}[ERR ]${NC} $*"; }
 
+on_err(){
+  local ec=$?
+  err "安装失败（exit=${ec}，line=${BASH_LINENO[0]}，cmd=${BASH_COMMAND}）"
+  exit "$ec"
+}
+trap on_err ERR
+
 APP_DIR="/opt/sui-panel"
 SERVICE_NAME="sui-panel"
 ENV_FILE="/etc/default/${SERVICE_NAME}"
@@ -30,9 +37,18 @@ preflight(){
 apt_base(){
   export DEBIAN_FRONTEND=noninteractive
   dpkg --configure -a || true
-  apt-get -f install -y || true
-  apt-get update -y
-  apt-get install -y curl ca-certificates rsync unzip socat
+  if command -v apt-get >/dev/null 2>&1; then
+    apt-get -f install -y || true
+    apt-get update
+    apt-get install -y curl ca-certificates rsync unzip socat
+  elif command -v dnf >/dev/null 2>&1; then
+    dnf install -y curl ca-certificates rsync unzip socat
+  elif command -v yum >/dev/null 2>&1; then
+    yum install -y curl ca-certificates rsync unzip socat
+  else
+    err "未找到受支持的包管理器（apt-get/dnf/yum）"
+    exit 1
+  fi
 }
 
 write_env(){
@@ -315,9 +331,9 @@ issue_tls_cert_and_apply(){
     return 1
   fi
 
-  command -v curl >/dev/null 2>&1 || { echo "缺少 curl，正在安装..."; apt-get update -y && apt-get install -y curl; }
-  command -v socat >/dev/null 2>&1 || { echo "缺少 socat，正在安装..."; apt-get update -y && apt-get install -y socat; }
-  command -v python3 >/dev/null 2>&1 || { echo "缺少 python3，正在安装..."; apt-get update -y && apt-get install -y python3; }
+  command -v curl >/dev/null 2>&1 || { echo "缺少 curl，正在安装..."; apt-get update && apt-get install -y curl; }
+  command -v socat >/dev/null 2>&1 || { echo "缺少 socat，正在安装..."; apt-get update && apt-get install -y socat; }
+  command -v python3 >/dev/null 2>&1 || { echo "缺少 python3，正在安装..."; apt-get update && apt-get install -y python3; }
 
   acme="${HOME}/.acme.sh/acme.sh"
   if [[ ! -x "$acme" ]]; then
@@ -434,11 +450,17 @@ chmod +x /usr/local/bin/sui
 }
 
 main(){
+  log "Step 1/7: 权限检查"
   require_root
+  log "Step 2/7: 环境预检"
   preflight
+  log "Step 3/7: 备份旧配置"
   backup_existing_state
+  log "Step 4/7: 安装基础依赖"
   apt_base
+  log "Step 5/7: 检查/安装 Xray"
   install_xray_if_needed
+  log "Step 6/7: 写入默认环境配置"
   write_env
 
   log "已固定为二进制安装模式"
