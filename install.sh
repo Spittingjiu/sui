@@ -40,7 +40,7 @@ apt_base(){
   if command -v apt-get >/dev/null 2>&1; then
     apt-get -f install -y || true
     apt-get update
-    apt-get install -y curl ca-certificates rsync unzip socat
+    apt-get install -y curl ca-certificates rsync unzip socat nodejs npm
   elif command -v dnf >/dev/null 2>&1; then
     dnf install -y curl ca-certificates rsync unzip socat
   elif command -v yum >/dev/null 2>&1; then
@@ -174,17 +174,18 @@ setup_binary_mode(){
     curl -fL --retry 3 -o "$APP_DIR/public/index.html" "$PANEL_INDEX_URL?t=$(date +%s)" || warn "GitHub 获取前端失败，保留现有前端文件"
   fi
 
+  npm install --omit=dev --no-audit --no-fund >/dev/null
   write_version_meta install
 
   cat > "/etc/systemd/system/${SERVICE_NAME}.service" <<EOF
 [Unit]
-Description=SUI Panel (Binary)
+Description=SUI Panel (Node Runtime)
 After=network.target
 [Service]
 Type=simple
 WorkingDirectory=$APP_DIR
 EnvironmentFile=$ENV_FILE
-ExecStart=$APP_DIR/sui-panel-bin
+ExecStart=/usr/bin/node $APP_DIR/server.mjs
 Restart=always
 RestartSec=2
 User=root
@@ -509,7 +510,7 @@ main(){
   log "Step 6/7: 写入默认环境配置"
   write_env
 
-  log "已固定为二进制安装模式"
+  log "已固定为 Node 运行模式（支持热更新）"
   setup_binary_mode
   echo binary > /etc/sui-panel.mode
   restore_existing_state
