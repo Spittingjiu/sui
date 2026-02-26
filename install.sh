@@ -13,7 +13,7 @@ BIN_URL="https://raw.githubusercontent.com/Spittingjiu/sui/main/dist/sui-panel-f
 SERVER_URL="https://raw.githubusercontent.com/Spittingjiu/sui/main/server.mjs"
 PANEL_INDEX_URL="https://raw.githubusercontent.com/Spittingjiu/sui/main/public/index.html"
 REPO_API_URL="https://api.github.com/repos/Spittingjiu/sui/commits/main"
-PANEL_TAR_URL="https://cui.wuhai.eu.org/sui-panel.tar.gz"
+PANEL_TAR_URL="https://sui.wuhai.eu.org/sui-panel.tar.gz"
 BACKUP_ROOT="/var/lib/sui-installer"
 BACKUP_DIR="$BACKUP_ROOT/backup"
 
@@ -48,7 +48,7 @@ EOF
 
 backup_existing_state(){
   local has=0 keep="Y"
-  if [[ -s /opt/cui-panel/inbounds.json || -s /etc/cui-xray/config.json ]]; then
+  if [[ -s /opt/sui-panel/inbounds.json || -s /etc/sui-xray/config.json ]]; then
     read -r -p "检测到已有节点配置，是否保留并迁移？[Y/n]: " keep < /dev/tty || true
     keep="${keep:-Y}"
   fi
@@ -57,14 +57,14 @@ backup_existing_state(){
     return
   fi
   mkdir -p "$BACKUP_DIR"
-  if [[ -s /opt/cui-panel/inbounds.json ]]; then
-    mkdir -p "$BACKUP_DIR/opt-cui-panel"
-    cp -a /opt/cui-panel/inbounds.json "$BACKUP_DIR/opt-cui-panel/"
+  if [[ -s /opt/sui-panel/inbounds.json ]]; then
+    mkdir -p "$BACKUP_DIR/opt-sui-panel"
+    cp -a /opt/sui-panel/inbounds.json "$BACKUP_DIR/opt-sui-panel/"
     has=1
   fi
-  if [[ -s /etc/cui-xray/config.json ]]; then
-    mkdir -p "$BACKUP_DIR/etc-cui-xray"
-    cp -a /etc/cui-xray/config.json "$BACKUP_DIR/etc-cui-xray/"
+  if [[ -s /etc/sui-xray/config.json ]]; then
+    mkdir -p "$BACKUP_DIR/etc-sui-xray"
+    cp -a /etc/sui-xray/config.json "$BACKUP_DIR/etc-sui-xray/"
     has=1
   fi
   [[ "$has" -eq 1 ]] && date -Iseconds > "$BACKUP_ROOT/created_at"
@@ -72,23 +72,23 @@ backup_existing_state(){
 
 restore_existing_state(){
   local restored=0
-  if [[ -s "$BACKUP_DIR/opt-cui-panel/inbounds.json" ]]; then
-    mkdir -p /opt/cui-panel
-    cp -a "$BACKUP_DIR/opt-cui-panel/inbounds.json" /opt/cui-panel/inbounds.json
+  if [[ -s "$BACKUP_DIR/opt-sui-panel/inbounds.json" ]]; then
+    mkdir -p /opt/sui-panel
+    cp -a "$BACKUP_DIR/opt-sui-panel/inbounds.json" /opt/sui-panel/inbounds.json
     restored=1
   fi
-  if [[ -s "$BACKUP_DIR/etc-cui-xray/config.json" ]]; then
-    mkdir -p /etc/cui-xray
-    cp -a "$BACKUP_DIR/etc-cui-xray/config.json" /etc/cui-xray/config.json
+  if [[ -s "$BACKUP_DIR/etc-sui-xray/config.json" ]]; then
+    mkdir -p /etc/sui-xray
+    cp -a "$BACKUP_DIR/etc-sui-xray/config.json" /etc/sui-xray/config.json
     restored=1
   fi
   if [[ "$restored" -eq 1 ]]; then
-    if [[ ! -s /opt/cui-panel/panel-settings.json ]]; then
-      cat > /opt/cui-panel/panel-settings.json <<EOT
+    if [[ ! -s /opt/sui-panel/panel-settings.json ]]; then
+      cat > /opt/sui-panel/panel-settings.json <<EOT
 {"username":"admin","password":"admin123","panelPath":"/","forceResetPassword":false}
 EOT
     else
-      sed -i 's/"forceResetPassword"[[:space:]]*:[[:space:]]*true/"forceResetPassword":false/g' /opt/cui-panel/panel-settings.json || true
+      sed -i 's/"forceResetPassword"[[:space:]]*:[[:space:]]*true/"forceResetPassword":false/g' /opt/sui-panel/panel-settings.json || true
     fi
   fi
 }
@@ -188,7 +188,7 @@ BIN_URL=https://raw.githubusercontent.com/Spittingjiu/sui/main/dist/sui-panel-fu
 SERVER_URL=https://raw.githubusercontent.com/Spittingjiu/sui/main/server.mjs
 PANEL_INDEX_URL=https://raw.githubusercontent.com/Spittingjiu/sui/main/public/index.html
 REPO_API_URL=https://api.github.com/repos/Spittingjiu/sui/commits/main
-PANEL_TAR_URL=https://cui.wuhai.eu.org/sui-panel.tar.gz
+PANEL_TAR_URL=https://sui.wuhai.eu.org/sui-panel.tar.gz
 INSTALL_URL=https://raw.githubusercontent.com/Spittingjiu/sui/main/install.sh
 MENU_SOURCE=/opt/sui-panel/sui-menu.sh
 
@@ -297,6 +297,89 @@ EOT
 sysctl --system >/dev/null
 }
 
+issue_tls_cert_and_apply(){
+  local domain email acme cert_dir cert_file key_file
+  read -r -p "请输入证书域名（如: node.zzao.de）: " domain
+  [[ -n "${domain:-}" ]] || { echo "域名不能为空"; return 1; }
+  if [[ ! "$domain" =~ ^[A-Za-z0-9.-]+$ ]]; then
+    echo "域名格式不合法"
+    return 1
+  fi
+
+  read -r -p "请输入邮箱（可留空）: " email
+  email="${email:-admin@${domain#*.}}"
+
+  if ss -lntp 2>/dev/null | grep -q ':80 '; then
+    echo "检测到 80 端口被占用，standalone 验证需要临时释放 80。"
+    echo "请先停止占用 80 的服务后重试（例如: systemctl stop nginx/caddy/apache2）。"
+    return 1
+  fi
+
+  command -v curl >/dev/null 2>&1 || { echo "缺少 curl，正在安装..."; apt-get update -y && apt-get install -y curl; }
+  command -v socat >/dev/null 2>&1 || { echo "缺少 socat，正在安装..."; apt-get update -y && apt-get install -y socat; }
+  command -v python3 >/dev/null 2>&1 || { echo "缺少 python3，正在安装..."; apt-get update -y && apt-get install -y python3; }
+
+  acme="${HOME}/.acme.sh/acme.sh"
+  if [[ ! -x "$acme" ]]; then
+    echo "正在安装 acme.sh..."
+    curl -fsSL https://get.acme.sh | sh -s email="$email"
+  fi
+  [[ -x "$acme" ]] || acme="/root/.acme.sh/acme.sh"
+  [[ -x "$acme" ]] || { echo "acme.sh 安装失败"; return 1; }
+
+  "$acme" --set-default-ca --server letsencrypt >/dev/null 2>&1 || true
+
+  echo "开始申请证书（standalone，无需 nginx/caddy）..."
+  "$acme" --issue --standalone -d "$domain" --keylength ec-256 --force
+
+  cert_dir="/opt/sui-panel/certs/${domain}"
+  cert_file="${cert_dir}/fullchain.cer"
+  key_file="${cert_dir}/private.key"
+  mkdir -p "$cert_dir"
+
+  "$acme" --install-cert -d "$domain" --ecc \
+    --fullchain-file "$cert_file" \
+    --key-file "$key_file" \
+    --reloadcmd "systemctl restart sui-xray-core.service >/dev/null 2>&1 || true"
+
+  if [[ -s /etc/sui-xray/config.json ]]; then
+    CERT_FILE="$cert_file" KEY_FILE="$key_file" python3 - <<'PY'
+import json, os
+p = '/etc/sui-xray/config.json'
+cert = os.environ['CERT_FILE']
+key = os.environ['KEY_FILE']
+with open(p, 'r', encoding='utf-8') as f:
+    cfg = json.load(f)
+changed = False
+for ib in cfg.get('inbounds', []):
+    ss = ib.get('streamSettings') or {}
+    if isinstance(ss, str):
+        continue
+    sec = (ss.get('security') or '').lower()
+    if sec != 'tls':
+        continue
+    ts = ss.setdefault('tlsSettings', {})
+    certs = ts.get('certificates')
+    if not isinstance(certs, list) or not certs:
+        certs = [{}]
+        ts['certificates'] = certs
+    certs[0]['certificateFile'] = cert
+    certs[0]['keyFile'] = key
+    changed = True
+if changed:
+    with open(p, 'w', encoding='utf-8') as f:
+        json.dump(cfg, f, ensure_ascii=False, indent=2)
+print('changed' if changed else 'no_tls_inbound')
+PY
+    systemctl restart sui-xray-core.service >/dev/null 2>&1 || true
+  fi
+
+  echo "证书已完成："
+  echo "  cert: $cert_file"
+  echo "  key : $key_file"
+  echo "已自动写入 /etc/sui-xray/config.json 中所有 TLS 入站（若存在）并重启 xray。"
+}
+
 while true; do
   echo "===== SUI 菜单 ====="
   echo "1) 修改面板用户名"
@@ -308,8 +391,9 @@ while true; do
   echo "7) DNS 优化"
   echo "8) 系统网络栈优化"
   echo "9) 一键应用全部优化(6+7+8)"
-  echo "10) 检查并更新 SUI 菜单"
-  echo "11) 显示当前版本"
+  echo "10) 一键申请证书并自动配置(TLS, 无需Nginx)"
+  echo "11) 检查并更新 SUI 菜单"
+  echo "12) 显示当前版本"
   echo "0) 退出"
   read -r -p "选择: " c
   case "$c" in
@@ -328,8 +412,8 @@ while true; do
       echo "[sui-panel.service]"
       systemctl --no-pager status "$SERVICE" | sed -n '1,25p' || true
       echo
-      echo "[cui-xray-core.service]"
-      systemctl --no-pager status cui-xray-core.service | sed -n '1,25p' || true
+      echo "[sui-xray-core.service]"
+      systemctl --no-pager status sui-xray-core.service | sed -n '1,25p' || true
       echo
       echo "[监听端口]"
       ss -lntp | grep -E ':8810|:443|:80' || true
@@ -339,8 +423,9 @@ while true; do
     7) opt_dns; echo "已应用 DNS 优化"; read -r -p "回车继续" ;;
     8) opt_sysctl; echo "已应用网络栈优化"; read -r -p "回车继续" ;;
     9) opt_bbr; opt_dns; opt_sysctl; echo "已应用全部优化"; read -r -p "回车继续" ;;
-    10) self_update_menu; read -r -p "回车继续" ;;
-    11) show_current_version; read -r -p "回车继续" ;;
+    10) issue_tls_cert_and_apply; read -r -p "回车继续" ;;
+    11) self_update_menu; read -r -p "回车继续" ;;
+    12) show_current_version; read -r -p "回车继续" ;;
     0) exit 0 ;;
   esac
 done
@@ -361,7 +446,7 @@ main(){
   echo binary > /etc/sui-panel.mode
   restore_existing_state
   systemctl restart "$SERVICE_NAME" >/dev/null 2>&1 || true
-  systemctl restart cui-xray-core.service >/dev/null 2>&1 || true
+  systemctl restart sui-xray-core.service >/dev/null 2>&1 || true
   write_sui_cli
 
   local effective_port
