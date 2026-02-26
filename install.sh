@@ -432,6 +432,9 @@ PY
   echo "正在配置面板 HTTPS 入口（Caddy 反代到面板端口）..."
   setup_panel_https_proxy "$domain" "$cert_file" "$key_file"
 
+  set_kv XRAY_PUBLIC_HOST "$domain"
+  reload_apply
+
   echo "证书与面板 HTTPS 已完成："
   echo "  cert: $cert_file"
   echo "  key : $key_file"

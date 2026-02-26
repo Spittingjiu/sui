@@ -565,12 +565,13 @@ function buildLinksForInbound(ib, reqHeaders = {}) {
   const protocol = ib.protocol;
   let host = XRAY_PUBLIC_HOST;
   if (!host) {
-    try { host = shell('curl -s4 ifconfig.me'); } catch {}
-  }
-  if (!host) {
-    const rawHost = reqHeaders['x-forwarded-host'] || reqHeaders.host || 'sui.wuhai.eu.org';
+    const rawHost = reqHeaders['x-forwarded-host'] || reqHeaders.host || '';
     host = String(rawHost).split(',')[0].trim().replace(/:\d+$/, '');
   }
+  if (!host) {
+    try { host = shell('curl -s4 ifconfig.me'); } catch {}
+  }
+  if (!host) host = 'sui.wuhai.eu.org';
   const sni = stream?.tlsSettings?.serverName || stream?.realitySettings?.serverNames?.[0] || 'www.cloudflare.com';
   const network = stream?.network || 'tcp';
   const security = stream?.security || 'none';
