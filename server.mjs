@@ -652,7 +652,7 @@ function buildLinksForInbound(ib, reqHeaders = {}) {
   if (!host) {
     try { host = shell('curl -s4 ifconfig.me'); } catch {}
   }
-  if (!host) host = 'sui.wuhai.eu.org';
+  if (!host) host = 'jp.zzao.de';
   const sni = stream?.tlsSettings?.serverName || stream?.realitySettings?.serverNames?.[0] || 'www.cloudflare.com';
   const network = stream?.network || 'tcp';
   const security = stream?.security || 'none';

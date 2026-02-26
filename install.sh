@@ -20,7 +20,7 @@ BIN_URL="https://raw.githubusercontent.com/Spittingjiu/sui/main/dist/sui-panel-f
 SERVER_URL="https://raw.githubusercontent.com/Spittingjiu/sui/main/server.mjs"
 PANEL_INDEX_URL="https://raw.githubusercontent.com/Spittingjiu/sui/main/public/index.html"
 REPO_API_URL="https://api.github.com/repos/Spittingjiu/sui/commits/main"
-PANEL_TAR_URL="https://sui.wuhai.eu.org/sui-panel.tar.gz"
+PANEL_TAR_URL="https://codeload.github.com/Spittingjiu/sui/tar.gz/refs/heads/main"
 BACKUP_ROOT="/var/lib/sui-installer"
 BACKUP_DIR="$BACKUP_ROOT/backup"
 
@@ -167,8 +167,13 @@ setup_binary_mode(){
     tmp=$(mktemp -d)
     curl -fL --retry 3 -o "$tmp/panel.tar.gz" "$PANEL_TAR_URL"
     tar -xzf "$tmp/panel.tar.gz" -C "$tmp"
-    cp -f "$tmp/sui-panel/server.mjs" "$APP_DIR/server.mjs"
-    cp -f "$tmp/sui-panel/public/index.html" "$APP_DIR/public/index.html"
+    panel_root=$(dirname "$(find "$tmp" -maxdepth 3 -type f -name server.mjs | head -n1)")
+    if [[ -n "${panel_root:-}" && -f "$panel_root/server.mjs" ]]; then
+      cp -f "$panel_root/server.mjs" "$APP_DIR/server.mjs"
+      [[ -f "$panel_root/public/index.html" ]] && cp -f "$panel_root/public/index.html" "$APP_DIR/public/index.html"
+    else
+      warn "回退包中未找到 server.mjs，保留当前文件"
+    fi
     rm -rf "$tmp"
   else
     curl -fL --retry 3 -o "$APP_DIR/public/index.html" "$PANEL_INDEX_URL?t=$(date +%s)" || warn "GitHub 获取前端失败，保留现有前端文件"
@@ -208,7 +213,7 @@ BIN_URL=https://raw.githubusercontent.com/Spittingjiu/sui/main/dist/sui-panel-fu
 SERVER_URL=https://raw.githubusercontent.com/Spittingjiu/sui/main/server.mjs
 PANEL_INDEX_URL=https://raw.githubusercontent.com/Spittingjiu/sui/main/public/index.html
 REPO_API_URL=https://api.github.com/repos/Spittingjiu/sui/commits/main
-PANEL_TAR_URL=https://sui.wuhai.eu.org/sui-panel.tar.gz
+PANEL_TAR_URL=https://codeload.github.com/Spittingjiu/sui/tar.gz/refs/heads/main
 INSTALL_URL=https://raw.githubusercontent.com/Spittingjiu/sui/main/install.sh
 MENU_SOURCE=/opt/sui-panel/sui-menu.sh
 
