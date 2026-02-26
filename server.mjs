@@ -195,7 +195,7 @@ function writeRenderedXrayConfigOnly() {
 function xrayApiAddInbound(ib) {
   const tmpDir = fs.mkdtempSync('/tmp/sui-adi-');
   const tmpFile = path.join(tmpDir, 'inbound.json');
-  fs.writeFileSync(tmpFile, JSON.stringify(toRuntimeInbound(ib), null, 2));
+  fs.writeFileSync(tmpFile, JSON.stringify({ inbounds: [toRuntimeInbound(ib)] }, null, 2));
   try {
     shell(`${XRAY_BIN} api adi --server=127.0.0.1:10085 ${shellQ(tmpFile)}`);
   } finally {
