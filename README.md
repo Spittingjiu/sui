@@ -1,4 +1,4 @@
-# SUI Panel 🚀
+# SUI Panel 苏逸面板 🚀
 
 SUI Panel 是一个面向真实运维场景的 Xray 管理面板，目标很直接：
 - **安装简单**：一条命令即可部署
