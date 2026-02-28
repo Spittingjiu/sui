@@ -805,10 +805,7 @@ async function loadCur(){const r=await api('/api/system/xray/version-current');i
 
 // 加载状态
 let __lastStatus='';
-let __statusFailCount=0;
-let __lastGoodStatus=null;
-async function loadStatus(){const r=await api('/api/system/status');if(!r.success){__statusFailCount++;if((r.msg||'').includes('unauthorized')){sp.textContent='面板:未登录';sx.textContent='Xray:未登录';si.textContent='节点:-';sp.className='badge status-bad';sx.className='badge status-bad';return;}if(__lastGoodStatus&&__statusFailCount<3){sp.textContent=`面板:${__lastGoodStatus.panelTxt}（缓存）`;sx.textContent=`Xray:${__lastGoodStatus.xrayTxt}（缓存）`;si.textContent=`节点:${__lastGoodStatus.nodeTxt}（缓存）`;sp.className='badge status-ok';sx.className='badge status-ok';return;}sp.textContent='面板:检测中';sx.textContent='Xray:检测中';si.textContent='节点:检测中';sp.className='badge';sx.className='badge';return;}__statusFailCount=0;const o=r.obj||{};const ok=v=>v==='active';const ptxt=ok(o.panel?.active)?'正常':'不正常';const xtxt=ok(o.xray?.active)?'正常':'不正常';const nodeTxt=`${(o.inboundsEnabled??'-')}/${(o.inboundsTotal??'-')}`;const xrayTxt=`${xtxt}${o.xrayVersion?(' · '+o.xrayVersion):''}`;const next=`${ptxt}|${xrayTxt}|${nodeTxt}`;__lastGoodStatus={panelTxt:ptxt,xrayTxt,nodeTxt};if(next===__lastStatus)return;__lastStatus=next;sp.textContent=`面板:${ptxt}`;sp.className='badge '+(ok(o.panel?.active)?'status-ok':'status-bad');sx.textContent=`Xray:${xrayTxt}`;sx.className='badge '+(ok(o.xray?.active)?'status-ok':'status-bad');si.textContent=`节点:${nodeTxt}`}
-
+async function loadStatus(){const r=await api('/api/system/status');if(!r.success){if((r.msg||'').includes('unauthorized')){sp.textContent='面板:未登录';sx.textContent='Xray:未登录';si.textContent='节点:-';sp.className='badge status-bad';sx.className='badge status-bad';return;}sp.textContent='面板:检测中';sx.textContent='Xray:检测中';si.textContent='节点:检测中';sp.className='badge';sx.className='badge';return;}const o=r.obj||{};const ok=v=>v==='active';const ptxt=ok(o.panel?.active)?'正常':'不正常';const xtxt=ok(o.xray?.active)?'正常':'不正常';const nodeTxt=`${(o.inboundsEnabled??'-')}/${(o.inboundsTotal??'-')}`;const xrayTxt=`${xtxt}${o.xrayVersion?(' · '+o.xrayVersion):''}`;const next=`${ptxt}|${xrayTxt}|${nodeTxt}`;if(next===__lastStatus)return;__lastStatus=next;sp.textContent=`面板:${ptxt}`;sp.className='badge '+(ok(o.panel?.active)?'status-ok':'status-bad');sx.textContent=`Xray:${xrayTxt}`;sx.className='badge '+(ok(o.xray?.active)?'status-ok':'status-bad');si.textContent=`节点:${nodeTxt}`}
 
 async function loadXrayVersions(){
   const [cur,vers]=await Promise.all([api('/api/system/xray/version-current'),api('/api/system/xray/versions')]);
@@ -846,8 +843,8 @@ let __statusTimer=null;
 let __dataTimer=null;
 function startRefreshLoops(){
   stopRefreshLoops();
-  const statusTick=async()=>{await loadStatus();__statusTimer=setTimeout(statusTick, document.hidden?30000:12000)};
-  const dataTick=async()=>{if(!forceReset && !modal.classList.contains('show') && !qrModal.classList.contains('show')) await loadData();__dataTimer=setTimeout(dataTick, document.hidden?30000:10000)};
+  const statusTick=async()=>{await loadStatus();__statusTimer=setTimeout(statusTick, 3000)};
+  const dataTick=async()=>{if(!forceReset && !modal.classList.contains('show') && !qrModal.classList.contains('show')) await loadData();__dataTimer=setTimeout(dataTick, 3000)};
   __statusTimer=setTimeout(statusTick,500);
   __dataTimer=setTimeout(dataTick,1000);
 }
