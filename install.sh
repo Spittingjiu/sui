@@ -197,7 +197,15 @@ setup_binary_mode(){
     curl -fsSL --retry 3 -o "$APP_DIR/package-lock.json" "$PANEL_LOCK_URL?t=$(date +%s)" || warn "GitHub 获取 package-lock.json 失败，保留现有文件"
   fi
 
-  # 二进制模式无需 npm 依赖，避免不同发行版 node/npm 版本冲突
+  # 运行模式为 Node Runtime，需要安装 JS 依赖；但不通过 apt 强装 node/npm，避免版本冲突
+  if command -v npm >/dev/null 2>&1; then
+    (cd "$APP_DIR" && npm install --omit=dev --no-audit --no-fund >/dev/null)
+  elif command -v corepack >/dev/null 2>&1; then
+    (cd "$APP_DIR" && corepack npm install --omit=dev --no-audit --no-fund >/dev/null)
+  else
+    err "未检测到 npm，无法安装运行依赖。请先安装 Node.js(含 npm) 后重试。"
+    exit 1
+  fi
   write_version_meta install
 
   cat > "/etc/systemd/system/${SERVICE_NAME}.service" <<EOF
