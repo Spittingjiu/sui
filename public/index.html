@@ -594,8 +594,9 @@
     <select id="f_network"><option>tcp</option><option>ws</option></select>
     <select id="f_security"><option>none</option><option>tls</option><option value="reality">reality</option></select>
     <input id="f_email" placeholder="email(tag)" />
-    <input id="f_user" placeholder="user(用于 socks/http 认证)" data-group="user" />
     <div class="proxy-auth-toggle" data-group="userAuth"><span>认证开关</span><label class="switch"><input id="f_auth_enabled" type="checkbox" /><span class="slider"></span></label><span class="muted">开启后自动填账号密码</span></div>
+    <input id="f_user" placeholder="user(用于 socks/http 认证)" data-group="user" />
+    <input id="f_password" placeholder="password(用于 socks/http 认证)" data-group="password" />
 
     <select id="f_chain_enabled"><option value="0">链式代理：关闭</option><option value="1">链式代理：开启（绑定1个下游）</option></select>
     <select id="f_chain_type" data-group="chain"><option value="socks5">下游类型 socks5</option><option value="http">下游类型 http</option><option value="reality">下游类型 reality(vless)</option><option value="shadowsocks">下游类型 shadowsocks</option></select>
@@ -604,7 +605,6 @@
     <select id="f_chain_udp443_policy" data-group="chain"><option value="block">UDP/443策略：拦截（推荐）</option><option value="direct">UDP/443策略：直连</option></select>
 
     <input id="f_uuid" placeholder="uuid" data-group="uuid" />
-    <input id="f_password" placeholder="password" data-group="password" />
     <input id="f_method" placeholder="method" data-group="method" value="aes-128-gcm" />
 
     <input id="f_flow" placeholder="flow(如 xtls-rprx-vision)" data-group="flow" />
@@ -751,7 +751,7 @@ function ensureProxyAuthDefaults(){
   if(!fUser.value) fUser.value='user'+(f_port.value||'');
   if(!f_password.value) f_password.value='pass'+Math.random().toString(36).slice(2,10);
 }
-function tune(){const p=f_protocol.value,n=f_network.value;const isForward=p==='forward';const isProxyInbound=(p==='socks'||p==='http');const isReality=(!isForward&&!isProxyInbound&&f_security.value==='reality');if(p==='shadowsocks'||isForward||isProxyInbound){f_security.value='none';f_security.disabled=true;}else{f_security.disabled=false;}f_network.disabled=isForward||isProxyInbound;if(isProxyInbound)f_network.value='tcp';const s=f_security.value;const chainOn=fChainEnabled.value==='1';const chainType=fChainType.value;const sh={uuid:(p==='vless'||p==='vmess'),user:isProxyInbound,userAuth:isProxyInbound,password:(p==='trojan'||p==='shadowsocks'||(isProxyInbound&&fAuthEnabled.checked)),method:(p==='shadowsocks'),flow:(p==='vless'),ws:(!isForward&&!isProxyInbound&&n==='ws'),tls:(!isForward&&!isProxyInbound&&(s==='tls'||s==='reality')),reality:(!isForward&&!isProxyInbound&&s==='reality'),forward:isForward,chain:chainOn,chainAuth:chainOn&&(chainType==='socks5'||chainType==='http'),chainReality:chainOn&&chainType==='reality',chainSS:chainOn&&chainType==='shadowsocks',realityTools:isReality};document.querySelectorAll('[data-group]').forEach(el=>setVis(el,!!(sh[el.dataset.group] ?? sh[(el.dataset.group||"").replace("-","_")])));if(isProxyInbound){if(!fAuthEnabled.checked){fUser.value='';f_password.value='';}else ensureProxyAuthDefaults();}if(isReality&&(!f_privateKey.value||!f_shortId.value)){genReality();}}
+function tune(){const p=f_protocol.value,n=f_network.value;const isForward=p==='forward';const isProxyInbound=(p==='socks'||p==='http');const isReality=(!isForward&&!isProxyInbound&&f_security.value==='reality');if(p==='shadowsocks'||isForward||isProxyInbound){f_security.value='none';f_security.disabled=true;}else{f_security.disabled=false;}f_network.disabled=isForward||isProxyInbound;if(isProxyInbound)f_network.value='tcp';const s=f_security.value;const chainOn=fChainEnabled.value==='1';const chainType=fChainType.value;const sh={uuid:(p==='vless'||p==='vmess'),user:(isProxyInbound&&fAuthEnabled.checked),userAuth:isProxyInbound,password:(p==='trojan'||p==='shadowsocks'||(isProxyInbound&&fAuthEnabled.checked)),method:(p==='shadowsocks'),flow:(p==='vless'),ws:(!isForward&&!isProxyInbound&&n==='ws'),tls:(!isForward&&!isProxyInbound&&(s==='tls'||s==='reality')),reality:(!isForward&&!isProxyInbound&&s==='reality'),forward:isForward,chain:chainOn,chainAuth:chainOn&&(chainType==='socks5'||chainType==='http'),chainReality:chainOn&&chainType==='reality',chainSS:chainOn&&chainType==='shadowsocks',realityTools:isReality};document.querySelectorAll('[data-group]').forEach(el=>setVis(el,!!(sh[el.dataset.group] ?? sh[(el.dataset.group||"").replace("-","_")])));if(isProxyInbound){if(!fAuthEnabled.checked){fUser.value='';f_password.value='';}else ensureProxyAuthDefaults();}if(isReality&&(!f_privateKey.value||!f_shortId.value)){genReality();}}
 
 // 工具函数（保留原有逻辑）
 function genUUID(){f_uuid.value=(crypto.randomUUID?crypto.randomUUID():'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx').replace(/[xy]/g,c=>{const r=Math.random()*16|0,v=c==='x'?r:(r&0x3|0x8);return v.toString(16)})}
