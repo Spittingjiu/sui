@@ -466,10 +466,6 @@
       }
     }
   
-.toast-wrap{position:fixed;right:16px;top:16px;z-index:99999;display:flex;flex-direction:column;gap:8px}
-.toast{background:#12213f;border:1px solid #345ea8;color:#eaf1ff;padding:10px 12px;border-radius:10px;box-shadow:0 8px 20px rgba(0,0,0,.35);font-size:13px;max-width:340px;opacity:.98}
-.toast.ok{border-color:#2f7d4a}
-.toast.err{border-color:#8a2f46}
 
 .traffic-stat{font-size:15px;font-weight:700;color:#1f2f55;letter-spacing:.2px;background:rgba(42,91,132,.08);border:1px solid var(--border-blue);padding:4px 8px;border-radius:8px}
 
@@ -648,23 +644,13 @@
   <button onclick="navigator.clipboard.writeText(qrLink.value)"><i class="fa fa-copy"></i> 复制链接</button>
 </div></div>
 
-<div id="toastWrap" class="toast-wrap"></div>
 
 <script>
 const $=id=>document.getElementById(id);
 let all=[],forwards=[],editId=null,editForwardId=null,forceReset=false;
 const NODE_DRAFT_KEY='sui_node_draft_v1';
 
-function notify(msg,type='ok',ms=2200){
-  const w=document.getElementById('toastWrap');
-  if(!w) return;
-  const el=document.createElement('div');
-  el.className='toast '+(type==='err'?'err':'ok');
-  el.textContent=String(msg||'完成');
-  w.appendChild(el);
-  setTimeout(()=>{el.style.opacity='0';el.style.transition='opacity .25s ease';},Math.max(300,ms-250));
-  setTimeout(()=>el.remove(),ms);
-}
+function notify(_msg,_type='ok',_ms=2200){return}
 
 const sniPool=['www.lovelive-anime.jp','addons.mozilla.org','www.icloud.com','www.microsoft.com','www.apple.com','www.bing.com','www.amazon.com'];
 const q=$('q'), list=$('list'), cv=$('cv'), mt=$('mt'), login=$('login'), app=$('app'), lu=$('lu'), lp=$('lp'), le=$('le');
