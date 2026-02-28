@@ -288,18 +288,36 @@ function buildInbound(form = {}) {
   if (protocol === 'vmess') settings = { clients: [{ id: uuid, alterId: 0, email }], disableInsecureEncryption: false };
   if (protocol === 'trojan') settings = { clients: [{ password, email }], fallbacks: [] };
   if (protocol === 'shadowsocks') settings = { clients: [{ method, password, email }], network: 'tcp,udp' };
+  if (protocol === 'socks') {
+    const user = String(form.user || '').trim();
+    settings = user
+      ? { auth: 'password', accounts: [{ user, pass: password }], udp: true }
+      : { auth: 'noauth', udp: true };
+  }
+  if (protocol === 'http') {
+    const user = String(form.user || '').trim();
+    settings = user
+      ? { accounts: [{ user, pass: password }], allowTransparent: false }
+      : { allowTransparent: false };
+  }
 
-  const stream = { network, security };
-  if (network === 'ws') stream.wsSettings = { path: form.path || '/', headers: { Host: form.host || '' } };
-  if (network === 'tcp') stream.tcpSettings = { acceptProxyProtocol: false, header: { type: 'none' } };
-  if (security === 'tls') stream.tlsSettings = { serverName: form.sni || '', certificates: [] };
-  if (security === 'reality') stream.realitySettings = { show: false, dest: form.realityDest || 'www.cloudflare.com:443', xver: 0, serverNames: [form.sni || 'www.cloudflare.com'], privateKey: form.privateKey || '', shortIds: [form.shortId || ''] };
+  const stream = {};
+  if (!['socks', 'http'].includes(protocol)) {
+    stream.network = network;
+    stream.security = security;
+    if (network === 'ws') stream.wsSettings = { path: form.path || '/', headers: { Host: form.host || '' } };
+    if (network === 'tcp') stream.tcpSettings = { acceptProxyProtocol: false, header: { type: 'none' } };
+    if (security === 'tls') stream.tlsSettings = { serverName: form.sni || '', certificates: [] };
+    if (security === 'reality') stream.realitySettings = { show: false, dest: form.realityDest || 'www.cloudflare.com:443', xver: 0, serverNames: [form.sni || 'www.cloudflare.com'], privateKey: form.privateKey || '', shortIds: [form.shortId || ''] };
+  }
 
   return normalizeInbound({
     up: 0, down: 0, total: Number(form.total || 0), remark,
     enable: true, expiryTime: Number(form.expiryTime || 0), listen: '', port, protocol,
     settings: j(settings), streamSettings: j(stream), tag: `inbound-${Date.now()}`,
-    sniffing: j({ enabled: true, destOverride: ['http', 'tls', 'quic'], metadataOnly: false, routeOnly: false }),
+    sniffing: j(['socks', 'http'].includes(protocol)
+      ? { enabled: false }
+      : { enabled: true, destOverride: ['http', 'tls', 'quic'], metadataOnly: false, routeOnly: false }),
     allocate: j({ strategy: 'always', refresh: 5, concurrency: 3 }),
     chain: form.chain || {}
   });
@@ -1140,6 +1158,17 @@ function buildLinksForInbound(ib, reqHeaders = {}) {
       links.push(`ss://${b64u(`${method}:${pwd}`)}@${host}:${ib.port}#${encodeURIComponent(ib.remark || email)}`);
     }
   }
+
+  if ((protocol === 'socks' || protocol === 'http') && links.length === 0) {
+    const accounts = settings.accounts || [];
+    const a = accounts[0] || {};
+    const user = String(a.user || '');
+    const pass = String(a.pass || '');
+    const auth = user ? `${encodeURIComponent(user)}:${encodeURIComponent(pass)}@` : '';
+    const scheme = protocol === 'socks' ? 'socks5' : 'http';
+    links.push(`${scheme}://${auth}${host}:${ib.port}#${encodeURIComponent(ib.remark || protocol)}`);
+  }
+
   return links;
 }
 
