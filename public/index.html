@@ -547,10 +547,9 @@
       </div>
       <div class="row" style="margin-top:8px">
         <select id="xvSel" class="grow"></select>
-        <input id="xvManual" placeholder="手动输入版本，如 v26.2.4" style="min-width:220px" />
-        <button onclick="switchXrayVersion()"><i class="fa fa-upload"></i> 切换版本</button>
+        <button onclick="switchXrayVersion()"><i class="fa fa-upload"></i> 立即安装所选版本</button>
       </div>
-      <div id="xvHint" class="muted" style="margin-top:8px">提示：切换会自动重启 Xray 服务；若列表为空可手动填版本号。</div>
+      <div id="xvHint" class="muted" style="margin-top:8px">提示：下拉选择版本后点按钮即可安装，安装完成会自动重启 Xray 服务。</div>
     </div>
   </div>
 
@@ -664,7 +663,7 @@ const fChainUUID=$('f_chain_uuid'), fChainServerName=$('f_chain_server_name'), f
 const fChainSSMethod=$('f_chain_ss_method'), fChainSSPassword=$('f_chain_ss_password');
 const tabMain=$('tab-main'), tabSettings=$('tab-settings'), tabXray=$('tab-xray'), forceResetTip=$('forceResetTip');
 const setUser=$('set_user'), setPath=$('set_path'), setOldPass=$('set_old_pass'), setNewPass=$('set_new_pass');
-const xvNow=$('xvNow'), xvSel=$('xvSel'), xvManual=$('xvManual'), xvHint=$('xvHint');
+const xvNow=$('xvNow'), xvSel=$('xvSel'), xvHint=$('xvHint');
 const xrayConfigText=$('xrayConfigText');
 let API_PREFIX='';
 
@@ -753,28 +752,32 @@ async function loadStatus(){const r=await api('/api/system/status');if(!r.succes
 
 async function loadXrayVersions(){
   const [cur,vers]=await Promise.all([api('/api/system/xray/version-current'),api('/api/system/xray/versions')]);
+  const curv = cur.success ? String(cur.obj.binary||'') : '';
   if(cur.success){
     xvNow.textContent=`当前 Xray: ${(cur.obj.binary||'-')} / ${(cur.obj.panel||'self-hosted')}`;
-    if(xvManual && !xvManual.value && cur.obj.binary) xvManual.value=String(cur.obj.binary).startsWith('v')?cur.obj.binary:('v'+cur.obj.binary);
   }
   xvSel.innerHTML='';
   if(vers.success&&Array.isArray(vers.obj)&&vers.obj.length){
-    for(const v of vers.obj){const o=document.createElement('option');o.value=v;o.textContent=v;xvSel.appendChild(o)}
-    if(xvHint) xvHint.textContent='提示：选择版本后切换，会自动重启 Xray 服务。';
+    for(const v of vers.obj){
+      const o=document.createElement('option');
+      o.value=v;
+      o.textContent=v;
+      if(curv && (v===curv || ('v'+v)===curv || v===('v'+curv))) o.selected=true;
+      xvSel.appendChild(o)
+    }
+    if(xvHint) xvHint.textContent='提示：下拉选择版本后点“立即安装所选版本”，会自动重启 Xray 服务。';
   }else{
-    const o=document.createElement('option');o.value='';o.textContent='(版本列表获取失败，可右侧手动输入)';xvSel.appendChild(o);
-    if(xvHint) xvHint.textContent='提示：版本列表获取失败（可能是网络原因），可手动填 v26.2.4 这种格式后切换。';
+    const o=document.createElement('option');o.value='';o.textContent='(版本列表获取失败)';xvSel.appendChild(o);
+    if(xvHint) xvHint.textContent='提示：版本列表获取失败（可能是网络原因），请稍后重试。';
   }
 }
 async function switchXrayVersion(){
-  const picked=(xvSel.value||'').trim();
-  let v=(xvManual?.value||'').trim() || picked;
-  if(!v) return notify('请选择或输入版本','err');
+  let v=(xvSel.value||'').trim();
+  if(!v) return notify('请先在下拉框选择版本','err');
   if(!v.startsWith('v')) v='v'+v;
-  
   const r=await api('/api/system/xray/switch',{method:'POST',body:JSON.stringify({version:v})});
-  if(!r.success) return notify(r.msg||'切换失败','err');
-  notify('切换成功，正在刷新状态');
+  if(!r.success) return notify(r.msg||'安装/切换失败','err');
+  notify('已开始安装并切换，正在刷新状态');
   await Promise.all([loadCur(),loadStatus(),loadXrayVersions()]);
 }
 
