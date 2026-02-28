@@ -288,7 +288,7 @@ function buildChainOutbound(ib) {
 
 function renderXrayConfig() {
   const enabledInbounds = state.inbounds.filter(x => x.enable);
-  const inbounds = enabledInbounds.map((ib) => toRuntimeInbound(ib));
+  const inbounds = [];
   const outbounds = [
     { protocol: 'freedom', tag: 'direct' },
     { protocol: 'blackhole', tag: 'blocked' }
@@ -298,11 +298,28 @@ function renderXrayConfig() {
   ];
 
   for (const ib of enabledInbounds) {
+    const rt = toRuntimeInbound(ib);
+    const domains = parseDomainFilter(ib.chain?.domainFilter || '');
+    const enhance = ib.chain?.enhanceDomainRouting !== false;
+    if (enhance && domains.length) {
+      rt.sniffing = {
+        ...(rt.sniffing || {}),
+        enabled: true,
+        destOverride: ['http', 'tls'],
+        routeOnly: true
+      };
+    }
+    inbounds.push(rt);
+
     const ob = buildChainOutbound(ib);
     if (!ob) continue;
     outbounds.push(ob);
-    const domains = parseDomainFilter(ib.chain?.domainFilter || '');
+
     if (domains.length) {
+      if (enhance) {
+        const udpPolicy = String(ib.chain?.udp443Policy || 'block').toLowerCase() === 'direct' ? 'direct' : 'blocked';
+        rules.push({ type: 'field', inboundTag: [ib.tag], network: 'udp', port: '443', outboundTag: udpPolicy });
+      }
       rules.push({ type: 'field', inboundTag: [ib.tag], domain: domains, outboundTag: ob.tag });
       rules.push({ type: 'field', inboundTag: [ib.tag], outboundTag: 'direct' });
     } else {
@@ -329,7 +346,7 @@ function renderXrayConfig() {
     },
     inbounds,
     outbounds,
-    routing: { rules }
+    routing: { domainStrategy: 'IPIfNonMatch', rules }
   };
 }
 
