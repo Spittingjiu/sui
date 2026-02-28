@@ -484,6 +484,7 @@
     <b><i class="fa fa-pagelines"></i> 苏逸面板</b>
     <button id="tabMainBtn" class="on" onclick="switchTab('main')"><i class="fa fa-th"></i> 节点管理</button>
     <button id="tabSettingsBtn" onclick="switchTab('settings')"><i class="fa fa-cog"></i> 面板设置</button>
+    <button id="tabXrayBtn" onclick="switchTab('xray')"><i class="fa fa-file-text-o"></i> Xray管理</button>
     <span class="grow"></span>
     <button class="danger" onclick="logout()"><i class="fa fa-sign-out"></i> 退 出</button>
   </div>
@@ -494,6 +495,8 @@
       <button onclick="loadData()"><i class="fa fa-refresh"></i> 刷 新</button>
       <button onclick="openAdd()"><i class="fa fa-plus"></i> 新 增</button>
       <button onclick="quickReality()"><i class="fa fa-magic"></i> 一键 Reality</button>
+      <button onclick="restartPanel()"><i class="fa fa-refresh"></i> 重启面板</button>
+      <button onclick="restartXray()"><i class="fa fa-repeat"></i> 重启Xray</button>
       <span id="cv" class="badge"><i class="fa fa-cogs"></i> 当前 Xray:-</span>
     </div>
 
@@ -542,6 +545,21 @@
         <button onclick="switchXrayVersion()"><i class="fa fa-upload"></i> 切换版本</button>
       </div>
       <div id="xvHint" class="muted" style="margin-top:8px">提示：切换会自动重启 Xray 服务；若列表为空可手动填版本号。</div>
+    </div>
+  </div>
+
+  <div id="tab-xray" style="display:none">
+    <div class="card">
+      <h2><i class="fa fa-file-code-o"></i> Xray 配置文件管理</h2>
+      <div class="row" style="margin-bottom:8px">
+        <button onclick="loadXrayConfig()"><i class="fa fa-refresh"></i> 读取配置</button>
+        <button onclick="saveXrayConfig()"><i class="fa fa-save"></i> 保存配置</button>
+        <button onclick="restartXray()"><i class="fa fa-repeat"></i> 保存后重启Xray</button>
+        <span class="grow"></span>
+        <span id="xcfgPath" class="badge">/etc/cui-xray/config.json</span>
+      </div>
+      <textarea id="xrayConfigText" style="width:100%;min-height:420px;font-family:monospace" placeholder="点击“读取配置”加载当前 Xray 配置"></textarea>
+      <div class="muted" style="margin-top:8px">说明：保存时会先做 JSON 校验与 Xray 配置测试，通过后才会落盘。</div>
     </div>
   </div>
 </div>
@@ -600,9 +618,10 @@ const sniPool=['www.lovelive-anime.jp','addons.mozilla.org','www.icloud.com','ww
 const q=$('q'), list=$('list'), cv=$('cv'), mt=$('mt'), login=$('login'), app=$('app'), lu=$('lu'), lp=$('lp'), le=$('le');
 const qrModal=$('qrModal'), qrImg=$('qrImg'), qrLink=$('qrLink'), sp=$('sp'), sx=$('sx'), si=$('si');
 const fForwardProtocol=$('f_forward_protocol'), fForwardTargetHost=$('f_forward_target_host'), fForwardTargetPort=$('f_forward_target_port');
-const tabMain=$('tab-main'), tabSettings=$('tab-settings'), forceResetTip=$('forceResetTip');
+const tabMain=$('tab-main'), tabSettings=$('tab-settings'), tabXray=$('tab-xray'), forceResetTip=$('forceResetTip');
 const setUser=$('set_user'), setPath=$('set_path'), setOldPass=$('set_old_pass'), setNewPass=$('set_new_pass');
 const xvNow=$('xvNow'), xvSel=$('xvSel'), xvManual=$('xvManual'), xvHint=$('xvHint');
+const xrayConfigText=$('xrayConfigText');
 let API_PREFIX='';
 
 // 核心API请求函数（保留原有逻辑）
@@ -624,7 +643,7 @@ async function doLogin(){
 function logout(){localStorage.removeItem('sessionToken');location.reload();}
 
 // 切换标签页
-function switchTab(t){const main=t==='main';tabMain.style.display=main?'':'none';tabSettings.style.display=main?'none':'';$('tabMainBtn').className=main?'on':'';$('tabSettingsBtn').className=main?'':'on';}
+function switchTab(t){const main=t==='main',settings=t==='settings',xray=t==='xray';tabMain.style.display=main?'':'none';tabSettings.style.display=settings?'':'none';tabXray.style.display=xray?'':'none';$('tabMainBtn').className=main?'on':'';$('tabSettingsBtn').className=settings?'on':'';$('tabXrayBtn').className=xray?'on':'';}
 
 // 面板设置相关（保留原有逻辑）
 async function loadPanelSettings(){const r=await api('/api/panel/settings');if(!r.success)return;setUser.value=r.obj.username||'';setPath.value=r.obj.panelPath||'/';if(r.obj.forceResetPassword){forceReset=true;forceResetTip.style.display='block';}}
@@ -668,6 +687,10 @@ async function submitAdd(){const proto=f_protocol.value;if(proto==='forward'){co
 // 一键 Reality（保留原有逻辑）
 function randomNodeName(){const a=['sunny','lucky','silver','gentle','swift','quiet','stellar','autumn','velvet','amber'];const b=['bridge','garden','harbor','forest','island','comet','breeze','valley','summit','oasis'];return `${a[Math.floor(Math.random()*a.length)]}-${b[Math.floor(Math.random()*b.length)]}`;}
 async function quickReality(){const def=randomNodeName();const remark=prompt('请输入节点备注',def);if(remark===null)return;const finalName=(remark||'').trim()||def;const sni=sniPool[Math.floor(Math.random()*sniPool.length)];const r=await api('/api/inbounds/add-reality-quick',{method:'POST',body:JSON.stringify({remark:finalName,sni})});if(!r.success)return alert(r.msg||'创建一键 Reality失败');loadData();alert('节点新建成功')}
+async function restartPanel(){if(!confirm('确认重启面板服务？'))return;const r=await api('/api/system/restart-panel',{method:'POST',body:'{}'});if(!r.success)return alert(r.msg||'重启面板失败');alert('面板已重启');setTimeout(()=>location.reload(),900)}
+async function restartXray(){if(!confirm('确认重启 Xray 服务？'))return;const r=await api('/api/system/restart-xray',{method:'POST',body:'{}'});if(!r.success)return alert(r.msg||'重启 Xray 失败');alert('Xray 已重启');await Promise.all([loadCur(),loadStatus()])}
+async function loadXrayConfig(){const r=await api('/api/system/xray/config');if(!r.success)return alert(r.msg||'读取配置失败');xrayConfigText.value=r.obj?.content||''}
+async function saveXrayConfig(){const content=(xrayConfigText.value||'').trim();if(!content)return alert('配置内容不能为空');const r=await api('/api/system/xray/config',{method:'POST',body:JSON.stringify({content})});if(!r.success)return alert(r.msg||'保存配置失败');alert(r.msg||'配置保存成功')}
 function applyNodeSpeedPreset(){f_protocol.value='vless';f_network.value='tcp';f_security.value='reality';if(!f_flow.value)f_flow.value='xtls-rprx-vision';if(!f_sni.value)randSni();if(!f_realityDest.value&&f_sni.value)f_realityDest.value=f_sni.value+':443';if(!f_uuid.value)genUUID();tune();alert('已应用推荐参数')}
 
 // 加载引擎信息（保留原有逻辑）

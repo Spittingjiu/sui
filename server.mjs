@@ -585,6 +585,17 @@ app.post('/api/inbounds/batch-toggle', async (req, res) => {
   res.json({ success: true, obj: out });
 });
 
+app.post('/api/system/restart-panel', async (_req, res) => {
+  try { shell(`systemctl restart ${PANEL_SERVICE}`); res.json({ success: true, msg: 'panel restarted' }); }
+  catch (e) { res.status(500).json({ success: false, msg: e.message }); }
+});
+
+app.post('/api/system/restart-xray', async (_req, res) => {
+  try { shell(`systemctl restart ${XRAY_SERVICE}`); res.json({ success: true, msg: 'xray restarted' }); }
+  catch (e) { res.status(500).json({ success: false, msg: e.message }); }
+});
+
+// backward compatibility
 app.post('/api/system/restart-xui', async (_req, res) => {
   try { shell(`systemctl restart ${XRAY_SERVICE}`); res.json({ success: true, msg: 'xray restarted' }); }
   catch (e) { res.status(500).json({ success: false, msg: e.message }); }
@@ -729,6 +740,33 @@ app.get('/api/system/xray/reality-gen', async (_req, res) => {
     const shortId = crypto.randomBytes(8).toString('hex');
     res.json({ success: true, obj: { privateKey: pri, publicKey: pub, shortId, spiderX: '/' } });
   } catch (e) { res.status(500).json({ success: false, msg: e.message }); }
+});
+
+app.get('/api/system/xray/config', async (_req, res) => {
+  try {
+    const content = fs.readFileSync(XRAY_CONFIG, 'utf8');
+    res.json({ success: true, obj: { path: XRAY_CONFIG, content } });
+  } catch (e) { res.status(500).json({ success: false, msg: e.message }); }
+});
+
+app.post('/api/system/xray/config', async (req, res) => {
+  let tmp = '';
+  try {
+    const content = String(req.body?.content || '');
+    if (!content.trim()) return res.status(400).json({ success: false, msg: '配置内容不能为空' });
+    let parsed = null;
+    try { parsed = JSON.parse(content); }
+    catch { return res.status(400).json({ success: false, msg: 'JSON 格式错误' }); }
+
+    tmp = `${XRAY_CONFIG}.tmp-${Date.now()}`;
+    fs.writeFileSync(tmp, JSON.stringify(parsed, null, 2));
+    shell(`${XRAY_BIN} run -test -c ${shellQ(tmp)}`);
+    fs.renameSync(tmp, XRAY_CONFIG);
+    res.json({ success: true, msg: '配置已保存并通过校验（未自动重启）' });
+  } catch (e) {
+    if (tmp && fs.existsSync(tmp)) { try { fs.unlinkSync(tmp); } catch {} }
+    res.status(500).json({ success: false, msg: e.message });
+  }
 });
 
 app.get('/api/system/xray/versions', async (_req, res) => {

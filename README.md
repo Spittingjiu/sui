@@ -13,7 +13,7 @@ SUI Panel 是一个面向真实运维场景的 Xray 管理面板，目标很直�
 - Web 面板登录与会话管理
 - 入站（Inbounds）管理
 - 自动生成并维护 Xray 配置
-- systemd 服务联动管理（`sui-panel.service` / `cui-xray-core.service`）
+- systemd 服务联动管理（`sui-panel.service` / `sui-xray-core.service`）
 - 节点链接与二维码生成
 
 ## ⚡ 一键安装（推荐）
@@ -48,10 +48,10 @@ sui
 
 - 面板程序目录：`/opt/sui-panel`
 - 环境变量：`/etc/default/sui-panel`
-- 面板数据：`/opt/cui-panel/inbounds.json`
-- 转发数据：`/opt/cui-panel/forwards.json`
-- 面板设置：`/opt/cui-panel/panel-settings.json`
-- Xray 配置：`/etc/cui-xray/config.json`
+- 面板数据：`/opt/sui-panel/inbounds.json`
+- 转发数据：`/opt/sui-panel/forwards.json`
+- 面板设置：`/opt/sui-panel/panel-settings.json`
+- Xray 配置：`/etc/sui-xray/config.json`
 
 ## 🔐 注意事项
 
