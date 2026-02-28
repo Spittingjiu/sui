@@ -454,10 +454,32 @@ while true; do
       read -r -p "回车继续"
       ;;
     2)
-      cu=$(grep -E '^PANEL_USER=' "$ENV_FILE" 2>/dev/null | tail -n1 | cut -d= -f2-)
-      cp=$(grep -E '^PANEL_PASS=' "$ENV_FILE" 2>/dev/null | tail -n1 | cut -d= -f2-)
-      echo "当前用户名: ${cu:-admin}"
-      echo "当前密码: ${cp:-admin123}"
+      creds=$(python3 - <<'PY2'
+import json
+from pathlib import Path
+u=''
+p=''
+ps=Path('/opt/sui-panel/data/panel-settings.json')
+if ps.exists():
+    try:
+        o=json.loads(ps.read_text(encoding='utf-8'))
+        u=str(o.get('username','') or '')
+        p=str(o.get('password','') or '')
+    except Exception:
+        pass
+if not u:
+    env=Path('/etc/default/sui-panel')
+    if env.exists():
+        for line in env.read_text(encoding='utf-8', errors='ignore').splitlines():
+            if line.startswith('PANEL_USER='): u=line.split('=',1)[1].strip()
+            if line.startswith('PANEL_PASS='): p=line.split('=',1)[1].strip()
+print((u or 'admin') + '\n' + (p or 'admin123'))
+PY2
+)
+      cu=$(echo "$creds" | awk 'NR==1{print; exit}')
+      cpw=$(echo "$creds" | awk 'NR==2{print; exit}')
+      echo "当前用户名: ${cu}"
+      echo "当前密码: ${cpw}"
       read -r -p "回车继续"
       ;;
     3) read -r -p "新端口: " pt; set_kv PORT "$pt"; reload_apply; echo "已更新端口为 $pt"; read -r -p "回车继续" ;;
