@@ -267,7 +267,11 @@ function normalizeInbound(x = {}) {
     tag: String(x.tag || `inbound-${Date.now()}-${Math.random().toString(16).slice(2,8)}`),
     sniffing: typeof x.sniffing === 'string' ? x.sniffing : j(x.sniffing || { enabled: true, destOverride: ['http', 'tls', 'quic'], metadataOnly: false, routeOnly: false }),
     allocate: typeof x.allocate === 'string' ? x.allocate : j(x.allocate || { strategy: 'always', refresh: 5, concurrency: 3 }),
-    chain: (typeof x.chain === 'string' ? parseJ(x.chain, {}) : (x.chain || {}))
+    chain: (typeof x.chain === 'string' ? parseJ(x.chain, {}) : (x.chain || {})),
+    trafficRawUp: Number(x.trafficRawUp || 0),
+    trafficRawDown: Number(x.trafficRawDown || 0),
+    trafficOffsetUp: Number(x.trafficOffsetUp || 0),
+    trafficOffsetDown: Number(x.trafficOffsetDown || 0)
   };
 }
 
@@ -812,12 +816,39 @@ function refreshInboundTraffic() {
       if (!map.has(tag)) map.set(tag, { up: 0, down: 0 });
       map.get(tag)[dir === 'uplink' ? 'up' : 'down'] = Number(item?.value || 0);
     }
+
+    let changed = false;
     for (const ib of state.inbounds) {
       const t = map.get(ib.tag || '');
       if (!t) continue;
-      ib.up = Number(t.up || 0);
-      ib.down = Number(t.down || 0);
+
+      const rawUp = Number(t.up || 0);
+      const rawDown = Number(t.down || 0);
+
+      const prevRawUp = Number(ib.trafficRawUp || 0);
+      const prevRawDown = Number(ib.trafficRawDown || 0);
+      let offUp = Number(ib.trafficOffsetUp || 0);
+      let offDown = Number(ib.trafficOffsetDown || 0);
+
+      // Xray 重启/计数清零时，累计前一段流量，避免面板“归零”
+      if (rawUp < prevRawUp) offUp += prevRawUp;
+      if (rawDown < prevRawDown) offDown += prevRawDown;
+
+      const totalUp = offUp + rawUp;
+      const totalDown = offDown + rawDown;
+
+      if (ib.up !== totalUp || ib.down !== totalDown || ib.trafficRawUp !== rawUp || ib.trafficRawDown !== rawDown || ib.trafficOffsetUp !== offUp || ib.trafficOffsetDown !== offDown) {
+        ib.up = totalUp;
+        ib.down = totalDown;
+        ib.trafficRawUp = rawUp;
+        ib.trafficRawDown = rawDown;
+        ib.trafficOffsetUp = offUp;
+        ib.trafficOffsetDown = offDown;
+        changed = true;
+      }
     }
+
+    if (changed) writeState();
   } catch {}
 }
 
