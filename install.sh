@@ -51,11 +51,11 @@ apt_base(){
   if command -v apt-get >/dev/null 2>&1; then
     apt-get -f install -y >/dev/null 2>&1 || true
     apt-get update -y >/dev/null
-    apt-get install -y curl ca-certificates rsync unzip socat nodejs npm >/dev/null
+    apt-get install -y curl ca-certificates rsync unzip socat nodejs >/dev/null
   elif command -v dnf >/dev/null 2>&1; then
-    dnf install -y curl ca-certificates rsync unzip socat nodejs npm >/dev/null
+    dnf install -y curl ca-certificates rsync unzip socat nodejs >/dev/null
   elif command -v yum >/dev/null 2>&1; then
-    yum install -y curl ca-certificates rsync unzip socat nodejs npm >/dev/null
+    yum install -y curl ca-certificates rsync unzip socat nodejs >/dev/null
   else
     err "未找到受支持的包管理器（apt-get/dnf/yum）"
     exit 1
