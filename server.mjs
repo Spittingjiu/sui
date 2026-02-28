@@ -15,16 +15,18 @@ const PANEL_TLS_ENABLE = ['1', 'true', 'yes', 'on'].includes(String(process.env.
 const PANEL_TLS_CERT = process.env.PANEL_TLS_CERT || '';
 const PANEL_TLS_KEY = process.env.PANEL_TLS_KEY || '';
 
-const DATA_DIR = '/opt/cui-panel';
+const DATA_DIR = '/opt/sui-panel/data';
 const DATA_FILE = path.join(DATA_DIR, 'inbounds.json');
+const FORWARDS_FILE = path.join(DATA_DIR, 'forwards.json');
 const PANEL_SETTINGS_FILE = path.join(DATA_DIR, 'panel-settings.json');
-const XRAY_DIR = '/etc/cui-xray';
+const XRAY_DIR = '/etc/sui-xray';
 const XRAY_CONFIG = path.join(XRAY_DIR, 'config.json');
 const XRAY_BIN = fs.existsSync('/usr/local/bin/xray') ? '/usr/local/bin/xray' : '/usr/local/x-ui/bin/xray-linux-amd64';
-const XRAY_SERVICE = 'cui-xray-core.service';
+const XRAY_SERVICE = 'sui-xray-core.service';
 
 const sessions = new Map();
 let state = { seq: 1, inbounds: [] };
+let forwardState = { seq: 1, rules: [] };
 let panelSettings = {
   username: process.env.PANEL_USER || 'admin',
   password: process.env.PANEL_PASS || 'admin123',
@@ -89,8 +91,97 @@ function shell(cmd) {
   return execSync(cmd, { shell: '/bin/bash', stdio: 'pipe' }).toString().trim();
 }
 
+
+function normalizeForwardRule(x = {}) {
+  const protocol = String(x.protocol || 'tcp').toLowerCase();
+  return {
+    id: Number(x.id || 0),
+    listenPort: Number(x.listenPort || 0),
+    targetHost: String(x.targetHost || '').trim(),
+    targetPort: Number(x.targetPort || 0),
+    protocol: ['tcp','udp','both'].includes(protocol) ? protocol : 'tcp',
+    enabled: x.enabled !== false,
+    remark: String(x.remark || '')
+  };
+}
+
+function writeForwardState(){
+  fs.writeFileSync(FORWARDS_FILE, JSON.stringify(forwardState, null, 2));
+}
+
+function forwardUnitName(id, proto){
+  return `sui-forward-${id}-${proto}.service`;
+}
+
+function renderForwardUnit(rule, proto){
+  const isUdp = proto === 'udp';
+  const exec = isUdp
+    ? `/usr/bin/socat -T60 UDP-LISTEN:${rule.listenPort},reuseaddr,fork UDP:${rule.targetHost}:${rule.targetPort}`
+    : `/usr/bin/socat -T60 TCP-LISTEN:${rule.listenPort},reuseaddr,fork TCP:${rule.targetHost}:${rule.targetPort}`;
+  return `[Unit]
+Description=SUI Port Forward ${rule.listenPort}->${rule.targetHost}:${rule.targetPort} (${proto})
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=${exec}
+Restart=always
+RestartSec=1
+User=root
+
+[Install]
+WantedBy=multi-user.target
+`;
+}
+
+function stopAndDisableForwardUnit(name){
+  try { shell(`systemctl stop ${name}`); } catch {}
+  try { shell(`systemctl disable ${name}`); } catch {}
+  try { fs.unlinkSync(`/etc/systemd/system/${name}`); } catch {}
+}
+
+function syncForwardServices(){
+  const wanted = new Set();
+  for (const r of (forwardState.rules || [])) {
+    const rule = normalizeForwardRule(r);
+    if (!rule.id || !rule.listenPort || !rule.targetHost || !rule.targetPort || !rule.enabled) continue;
+    const protos = rule.protocol === 'both' ? ['tcp','udp'] : [rule.protocol];
+    for (const proto of protos) {
+      const unit = forwardUnitName(rule.id, proto);
+      wanted.add(unit);
+      const unitPath = `/etc/systemd/system/${unit}`;
+      const content = renderForwardUnit(rule, proto);
+      if (!fs.existsSync(unitPath) || fs.readFileSync(unitPath, 'utf8') !== content) fs.writeFileSync(unitPath, content);
+    }
+  }
+
+  for (const f of fs.readdirSync('/etc/systemd/system')) {
+    if (!f.startsWith('sui-forward-') || !f.endsWith('.service')) continue;
+    if (!wanted.has(f)) stopAndDisableForwardUnit(f);
+  }
+
+  shell('systemctl daemon-reload');
+  for (const unit of wanted) {
+    try { shell(`systemctl enable ${unit}`); } catch {}
+    try { shell(`systemctl restart ${unit}`); } catch {}
+  }
+}
+
+function loadForwardState(){
+  if (fs.existsSync(FORWARDS_FILE)) {
+    const o = parseJ(fs.readFileSync(FORWARDS_FILE, 'utf8'), {});
+    const rules = Array.isArray(o.rules) ? o.rules.map(normalizeForwardRule) : [];
+    const seq = Number(o.seq || 1);
+    forwardState = { seq: seq > 0 ? seq : 1, rules };
+  } else {
+    forwardState = { seq: 1, rules: [] };
+    writeForwardState();
+  }
+  syncForwardServices();
+}
+
 function ensureCoreService() {
-  const unitPath = '/etc/systemd/system/cui-xray-core.service';
+  const unitPath = '/etc/systemd/system/sui-xray-core.service';
   const unit = `[Unit]\nDescription=SUI Self-hosted Xray Core\nAfter=network.target\n\n[Service]\nType=simple\nExecStart=${XRAY_BIN} run -c ${XRAY_CONFIG}\nRestart=always\nRestartSec=2\nUser=root\nLimitNOFILE=1048576\n\n[Install]\nWantedBy=multi-user.target\n`;
   if (!fs.existsSync(unitPath) || fs.readFileSync(unitPath, 'utf8') !== unit) {
     fs.writeFileSync(unitPath, unit);
@@ -454,6 +545,7 @@ function loadState() {
   ensureDirs();
   loadPanelSettings();
   ensureCoreService();
+  loadForwardState();
   if (fs.existsSync(DATA_FILE)) {
     state = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
     state.seq ||= 1;
@@ -694,6 +786,64 @@ app.post('/api/inbounds/batch-toggle', async (req, res) => {
   res.json({ success: true, obj: out });
 });
 
+
+app.get('/api/forwards', async (_req, res) => {
+  res.json({ success: true, obj: (forwardState.rules || []).sort((a,b)=>a.id-b.id) });
+});
+
+app.post('/api/forwards', async (req, res) => {
+  try {
+    const payload = normalizeForwardRule(req.body || {});
+    if (!payload.listenPort || !payload.targetHost || !payload.targetPort) return res.status(400).json({ success: false, msg: 'listenPort/targetHost/targetPort required' });
+    if ((forwardState.rules || []).some(x => x.listenPort === payload.listenPort && x.enabled)) return res.status(400).json({ success: false, msg: '监听端口已被占用' });
+    payload.id = forwardState.seq++;
+    payload.enabled = true;
+    forwardState.rules.push(payload);
+    writeForwardState();
+    syncForwardServices();
+    res.json({ success: true, obj: payload });
+  } catch (e) { res.status(500).json({ success: false, msg: e.message }); }
+});
+
+app.put('/api/forwards/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const idx = (forwardState.rules || []).findIndex(x => x.id === id);
+    if (idx < 0) return res.status(404).json({ success: false, msg: 'not found' });
+    const old = forwardState.rules[idx];
+    const next = normalizeForwardRule({ ...old, ...(req.body || {}), id });
+    if (!next.listenPort || !next.targetHost || !next.targetPort) return res.status(400).json({ success: false, msg: 'listenPort/targetHost/targetPort required' });
+    const clash = (forwardState.rules || []).some(x => x.id !== id && x.enabled && x.listenPort === next.listenPort);
+    if (clash) return res.status(400).json({ success: false, msg: '监听端口已被占用' });
+    forwardState.rules[idx] = next;
+    writeForwardState();
+    syncForwardServices();
+    res.json({ success: true, obj: next });
+  } catch (e) { res.status(500).json({ success: false, msg: e.message }); }
+});
+
+app.post('/api/forwards/:id/toggle', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const t = (forwardState.rules || []).find(x => x.id === id);
+    if (!t) return res.status(404).json({ success: false, msg: 'not found' });
+    t.enabled = !t.enabled;
+    writeForwardState();
+    syncForwardServices();
+    res.json({ success: true, obj: t });
+  } catch (e) { res.status(500).json({ success: false, msg: e.message }); }
+});
+
+app.delete('/api/forwards/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    forwardState.rules = (forwardState.rules || []).filter(x => x.id !== id);
+    writeForwardState();
+    syncForwardServices();
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ success: false, msg: e.message }); }
+});
+
 app.post('/api/system/restart-panel', async (_req, res) => {
   try { shell(`systemctl restart ${PANEL_SERVICE}`); res.json({ success: true, msg: 'panel restarted' }); }
   catch (e) { res.status(500).json({ success: false, msg: e.message }); }
@@ -914,6 +1064,7 @@ app.post('/api/system/xray/switch', async (req, res) => {
     ].join(' && ');
     shell(cmd);
     ensureCoreService();
+  loadForwardState();
     shell('systemctl daemon-reload');
     shell(`systemctl restart ${XRAY_SERVICE}`);
     const now = shell('/usr/local/bin/xray version 2>/dev/null | head -n 1');
