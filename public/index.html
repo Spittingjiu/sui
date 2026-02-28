@@ -613,10 +613,10 @@
 
     <input id="f_sni" placeholder="sni" data-group="tls" />
     <input id="f_realityDest" placeholder="reality dest (如 addons.mozilla.org:443)" data-group="reality" />
-    <input id="f_shortId" placeholder="shortId" data-group="reality" />
+    <input id="f_shortId" placeholder="shortId（自动生成，可手改）" data-group="reality" />
 
-    <input id="f_privateKey" placeholder="privateKey" data-group="reality" />
-    <input id="f_publicKey" placeholder="publicKey(展示用)" data-group="reality" />
+    <input id="f_privateKey" placeholder="privateKey（自动生成，可手改）" data-group="reality" />
+    <input id="f_publicKey" placeholder="publicKey（自动生成展示）" data-group="reality" />
 
     <input id="f_chain_host" data-group="chain" placeholder="下游地址 host" />
     <input id="f_chain_port" data-group="chain" placeholder="下游端口 port" />
@@ -756,7 +756,7 @@ function tune(){const p=f_protocol.value,n=f_network.value;const isForward=p==='
 // 工具函数（保留原有逻辑）
 function genUUID(){f_uuid.value=(crypto.randomUUID?crypto.randomUUID():'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx').replace(/[xy]/g,c=>{const r=Math.random()*16|0,v=c==='x'?r:(r&0x3|0x8);return v.toString(16)})}
 function randSni(){const s=sniPool[Math.floor(Math.random()*sniPool.length)];f_sni.value=s;if(f_security.value==='reality')f_realityDest.value=s+':443'}
-let __realityGenBusy=false;async function genReality(){if(__realityGenBusy)return;__realityGenBusy=true;try{const r=await api('/api/system/xray/reality-gen');if(!r.success)return notify(r.msg||'生成 Reality 密钥失败','err');f_privateKey.value=r.obj.privateKey||'';f_publicKey.value=r.obj.publicKey||'';f_shortId.value=r.obj.shortId||'';if(!f_sni.value)randSni();if(!f_uuid.value)genUUID();if(!f_flow.value)f_flow.value='xtls-rprx-vision';}finally{__realityGenBusy=false;}}
+let __realityGenBusy=false;async function genReality(){if(__realityGenBusy)return;__realityGenBusy=true;try{const r=await api('/api/system/xray/reality-gen');if(!r.success)return notify(r.msg||'生成 Reality 密钥失败','err');f_privateKey.value=r.obj.privateKey||'';f_publicKey.value=r.obj.publicKey||'';f_shortId.value=r.obj.shortId||'';if(!f_sni.value)randSni();if(!f_uuid.value)genUUID();if(!f_flow.value)f_flow.value='xtls-rprx-vision';notify('Reality 密钥已自动生成并填入下方框');}finally{__realityGenBusy=false;}}
 
 // 新增/编辑节点（保留原有逻辑）
 async function openAdd(){editId=null;editForwardId=null;mt.innerHTML='<i class="fa fa-plus-circle"></i> 新增节点';const p=await api('/api/inbounds/next-port');if(p.success)f_port.value=p.obj;fForwardProtocol.value='tcp';fForwardTargetHost.value='';fForwardTargetPort.value='';fChainEnabled.value='0';fChainType.value='socks5';fChainDomain.value='';fChainEnhance.value='1';fChainUdp443Policy.value='block';fChainHost.value='';fChainPort.value='';fChainUser.value='';fChainPass.value='';fChainUUID.value='';fChainServerName.value='';fChainPublicKey.value='';fChainShortId.value='';fChainFlow.value='';fChainSSMethod.value='aes-128-gcm';fChainSSPassword.value='';fUser.value='';fAuthEnabled.checked=false;f_uuid.value='';f_password.value='';f_privateKey.value='';f_publicKey.value='';f_shortId.value='';tune();modal.classList.add('show')}
