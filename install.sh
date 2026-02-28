@@ -78,8 +78,8 @@ EOF
 
 backup_existing_state(){
   local has=0 keep="Y"
-  if [[ -s /opt/sui-panel/inbounds.json || -s /etc/sui-xray/config.json ]]; then
-    read -r -p "检测到已有节点配置，是否保留并迁移？[Y/n]: " keep < /dev/tty || true
+  if [[ -s /opt/sui-panel/data/inbounds.json || -s /etc/sui-xray/config.json ]]; then
+    read -r -p "检测到已有 SUI 配置，是否保留？[Y/n]: " keep < /dev/tty || true
     keep="${keep:-Y}"
   fi
   if [[ "$keep" =~ ^[Nn]$ ]]; then
@@ -87,9 +87,19 @@ backup_existing_state(){
     return
   fi
   mkdir -p "$BACKUP_DIR"
-  if [[ -s /opt/sui-panel/inbounds.json ]]; then
-    mkdir -p "$BACKUP_DIR/opt-sui-panel"
-    cp -a /opt/sui-panel/inbounds.json "$BACKUP_DIR/opt-sui-panel/"
+  if [[ -s /opt/sui-panel/data/inbounds.json ]]; then
+    mkdir -p "$BACKUP_DIR/opt-sui-panel-data"
+    cp -a /opt/sui-panel/data/inbounds.json "$BACKUP_DIR/opt-sui-panel-data/"
+    has=1
+  fi
+  if [[ -s /opt/sui-panel/data/forwards.json ]]; then
+    mkdir -p "$BACKUP_DIR/opt-sui-panel-data"
+    cp -a /opt/sui-panel/data/forwards.json "$BACKUP_DIR/opt-sui-panel-data/"
+    has=1
+  fi
+  if [[ -s /opt/sui-panel/data/panel-settings.json ]]; then
+    mkdir -p "$BACKUP_DIR/opt-sui-panel-data"
+    cp -a /opt/sui-panel/data/panel-settings.json "$BACKUP_DIR/opt-sui-panel-data/"
     has=1
   fi
   if [[ -s /etc/sui-xray/config.json ]]; then
@@ -105,9 +115,19 @@ backup_existing_state(){
 
 restore_existing_state(){
   local restored=0
-  if [[ -s "$BACKUP_DIR/opt-sui-panel/inbounds.json" ]]; then
-    mkdir -p /opt/sui-panel
-    cp -a "$BACKUP_DIR/opt-sui-panel/inbounds.json" /opt/sui-panel/inbounds.json
+  if [[ -s "$BACKUP_DIR/opt-sui-panel-data/inbounds.json" ]]; then
+    mkdir -p /opt/sui-panel/data
+    cp -a "$BACKUP_DIR/opt-sui-panel-data/inbounds.json" /opt/sui-panel/data/inbounds.json
+    restored=1
+  fi
+  if [[ -s "$BACKUP_DIR/opt-sui-panel-data/forwards.json" ]]; then
+    mkdir -p /opt/sui-panel/data
+    cp -a "$BACKUP_DIR/opt-sui-panel-data/forwards.json" /opt/sui-panel/data/forwards.json
+    restored=1
+  fi
+  if [[ -s "$BACKUP_DIR/opt-sui-panel-data/panel-settings.json" ]]; then
+    mkdir -p /opt/sui-panel/data
+    cp -a "$BACKUP_DIR/opt-sui-panel-data/panel-settings.json" /opt/sui-panel/data/panel-settings.json
     restored=1
   fi
   if [[ -s "$BACKUP_DIR/etc-sui-xray/config.json" ]]; then
@@ -116,12 +136,12 @@ restore_existing_state(){
     restored=1
   fi
   if [[ "$restored" -eq 1 ]]; then
-    if [[ ! -s /opt/sui-panel/panel-settings.json ]]; then
-      cat > /opt/sui-panel/panel-settings.json <<EOT
+    if [[ ! -s /opt/sui-panel/data/panel-settings.json ]]; then
+      cat > /opt/sui-panel/data/panel-settings.json <<EOT
 {"username":"admin","password":"admin123","panelPath":"/","forceResetPassword":false}
 EOT
     else
-      sed -i 's/"forceResetPassword"[[:space:]]*:[[:space:]]*true/"forceResetPassword":false/g' /opt/sui-panel/panel-settings.json || true
+      sed -i 's/"forceResetPassword"[[:space:]]*:[[:space:]]*true/"forceResetPassword":false/g' /opt/sui-panel/data/panel-settings.json || true
     fi
   fi
 }
@@ -432,7 +452,7 @@ issue_tls_cert_and_apply(){
   "$acme" --install-cert -d "$domain" --ecc \
     --fullchain-file "$cert_file" \
     --key-file "$key_file" \
-    --reloadcmd "systemctl restart sui-panel.service >/dev/null 2>&1 || true; systemctl restart cui-xray-core.service >/dev/null 2>&1 || systemctl restart sui-xray-core.service >/dev/null 2>&1 || true"
+    --reloadcmd "systemctl restart sui-panel.service >/dev/null 2>&1 || true; systemctl restart sui-xray-core.service >/dev/null 2>&1 || true"
 
   if [[ -s /etc/sui-xray/config.json ]]; then
     CERT_FILE="$cert_file" KEY_FILE="$key_file" python3 - <<'PY'
@@ -463,7 +483,7 @@ if changed:
         json.dump(cfg, f, ensure_ascii=False, indent=2)
 print('changed' if changed else 'no_tls_inbound')
 PY
-    systemctl restart cui-xray-core.service >/dev/null 2>&1 || systemctl restart sui-xray-core.service >/dev/null 2>&1 || true
+    systemctl restart sui-xray-core.service >/dev/null 2>&1 || true
   fi
 
   echo "正在配置面板原生 HTTPS（无 Nginx/Caddy 反代）..."
@@ -510,8 +530,8 @@ while true; do
       echo "[sui-panel.service]"
       systemctl --no-pager status "$SERVICE" | sed -n '1,25p' || true
       echo
-      echo "[cui-xray-core.service]"
-      systemctl --no-pager status cui-xray-core.service | sed -n '1,25p' || systemctl --no-pager status sui-xray-core.service | sed -n '1,25p' || true
+      echo "[sui-xray-core.service]"
+      systemctl --no-pager status sui-xray-core.service | sed -n '1,25p' || true
       echo
       echo "[监听端口]"
       ss -lntp | grep -E ':8810|:443|:80' || true
@@ -551,7 +571,7 @@ main(){
   echo binary > /etc/sui-panel.mode
   restore_existing_state
   systemctl restart "$SERVICE_NAME" >/dev/null 2>&1 || true
-  systemctl restart cui-xray-core.service >/dev/null 2>&1 || systemctl restart sui-xray-core.service >/dev/null 2>&1 || true
+  systemctl restart sui-xray-core.service >/dev/null 2>&1 || true
   write_sui_cli
 
   local effective_port panel_user panel_pass

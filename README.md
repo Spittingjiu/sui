@@ -4,7 +4,7 @@ SUI Panel 是一个面向真实运维场景的 Xray 管理面板，目标很直�
 - **安装简单**：一条命令即可部署
 - **维护省心**：内置菜单可直接改账号、改端口、更新版本
 - **状态清晰**：服务状态、版本信息、端口监听一眼可见
-- **数据可控**：核心配置与面板数据都落在固定路径，便于备份与迁移
+- **数据可控**：核心配置与面板数据都落在固定路径，便于备份与恢复
 
 适合想要“快速上线 + 稳定长期用”的 VPS 用户。✨
 
@@ -51,9 +51,9 @@ sui
 
 - 面板程序目录：`/opt/sui-panel`
 - 环境变量：`/etc/default/sui-panel`
-- 面板数据：`/opt/sui-panel/inbounds.json`
-- 转发数据：`/opt/sui-panel/forwards.json`
-- 面板设置：`/opt/sui-panel/panel-settings.json`
+- 面板数据：`/opt/sui-panel/data/inbounds.json`
+- 转发数据：`/opt/sui-panel/data/forwards.json`
+- 面板设置：`/opt/sui-panel/data/panel-settings.json`
 - Xray 配置：`/etc/sui-xray/config.json`
 
 ## 🔀 链式代理与域名分流（新）
