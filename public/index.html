@@ -820,6 +820,27 @@ async function switchXrayVersion(){
   await Promise.all([loadCur(),loadStatus(),loadXrayVersions()]);
 }
 
+
+let __statusTimer=null;
+let __dataTimer=null;
+function startRefreshLoops(){
+  stopRefreshLoops();
+  const statusTick=async()=>{await loadStatus();__statusTimer=setTimeout(statusTick, document.hidden?30000:12000)};
+  const dataTick=async()=>{if(!forceReset && !modal.classList.contains('show') && !qrModal.classList.contains('show')) await loadData();__dataTimer=setTimeout(dataTick, document.hidden?30000:10000)};
+  __statusTimer=setTimeout(statusTick,500);
+  __dataTimer=setTimeout(dataTick,1000);
+}
+function stopRefreshLoops(){
+  if(__statusTimer){clearTimeout(__statusTimer);__statusTimer=null;}
+  if(__dataTimer){clearTimeout(__dataTimer);__dataTimer=null;}
+}
+
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden) return;
+  loadStatus();
+  if(!forceReset) loadData();
+});
+
 // 初始化（保留原有逻辑）
 async function init(){let __qTimer=null;q.oninput=()=>{clearTimeout(__qTimer);__qTimer=setTimeout(render,120)};f_protocol.onchange=()=>{if((f_protocol.value==='socks'||f_protocol.value==='http')&&fAuthEnabled.checked)ensureProxyAuthDefaults();tune()};f_network.onchange=tune;f_security.onchange=tune;fAuthEnabled.onchange=()=>{if(fAuthEnabled.checked)ensureProxyAuthDefaults();tune()};fChainEnabled.onchange=tune;fChainType.onchange=tune;fChainEnhance.onchange=tune;fChainUdp443Policy.onchange=tune;switchTab('main');
   await Promise.all([loadPanelSettings(),loadCur(),loadStatus()]);
@@ -829,8 +850,7 @@ async function init(){let __qTimer=null;q.oninput=()=>{clearTimeout(__qTimer);__
   }
   // 版本列表可能受外网影响较慢，改为后台加载，避免拖慢登录后节点显示
   loadXrayVersions();
-  setInterval(loadStatus,15000);
-  setInterval(()=>{if(!forceReset && !modal.classList.contains('show') && !qrModal.classList.contains('show')) loadData();},10000);
+  startRefreshLoops();
 }
 
 // 页面启动逻辑（保留原有逻辑）
