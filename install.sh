@@ -347,10 +347,7 @@ setup_panel_https_native(){
   cert_file="$1"
   key_file="$2"
 
-  # 关闭常见反代服务，确保符合“无反代”要求
-  systemctl stop nginx caddy apache2 httpd >/dev/null 2>&1 || true
-  systemctl disable nginx caddy apache2 httpd >/dev/null 2>&1 || true
-
+  # 不安装/不依赖反代；仅切换面板为原生 TLS
   set_kv PORT "443"
   set_kv PANEL_TLS_ENABLE "1"
   set_kv PANEL_TLS_CERT "$cert_file"
@@ -363,7 +360,16 @@ setup_panel_https_native(){
 
 issue_tls_cert_and_apply(){
   local domain email acme cert_dir cert_file key_file
-  read -r -p "请输入证书域名（如: node.zzao.de）: " domain
+  local -a stopped_services=()
+  restore_80_services(){
+    local s
+    for s in "${stopped_services[@]}"; do
+      systemctl restart "$s" >/dev/null 2>&1 || true
+    done
+  }
+  trap restore_80_services RETURN
+
+  read -r -p "请输入证书域名（如: panel.example.com）: " domain
   [[ -n "${domain:-}" ]] || { echo "域名不能为空"; return 1; }
   if [[ ! "$domain" =~ ^[A-Za-z0-9.-]+$ ]]; then
     echo "域名格式不合法"
@@ -374,9 +380,23 @@ issue_tls_cert_and_apply(){
   email="${email:-admin@${domain#*.}}"
 
   if ss -lntp 2>/dev/null | grep -q ':80 '; then
-    echo "检测到 80 端口被占用，standalone 验证需要临时释放 80。"
-    echo "请先停止占用 80 的服务后重试（例如: systemctl stop nginx/caddy/apache2）。"
-    return 1
+    echo "检测到 80 端口被占用，正在尝试自动临时释放..."
+    for s in nginx caddy apache2 httpd lighttpd haproxy; do
+      if systemctl is-active --quiet "$s"; then
+        systemctl stop "$s" >/dev/null 2>&1 || true
+        if ! systemctl is-active --quiet "$s"; then
+          stopped_services+=("$s")
+          echo "  - 已临时停止: $s"
+        fi
+      fi
+    done
+    # 再次检查 80 端口是否已释放
+    sleep 1
+    if ss -lntp 2>/dev/null | grep -q ':80 '; then
+      echo "80 端口仍被占用，可能是非 systemd 服务（如 docker/自启进程）。"
+      ss -lntp 2>/dev/null | grep ':80 ' || true
+      return 1
+    fi
   fi
 
   command -v curl >/dev/null 2>&1 || { echo "缺少 curl，正在安装..."; apt-get update && apt-get install -y curl; }
