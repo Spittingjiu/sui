@@ -783,8 +783,10 @@ async function switchXrayVersion(){
 
 // 初始化（保留原有逻辑）
 async function init(){let __qTimer=null;q.oninput=()=>{clearTimeout(__qTimer);__qTimer=setTimeout(render,120)};f_protocol.onchange=tune;f_network.onchange=tune;f_security.onchange=tune;fChainEnabled.onchange=tune;fChainType.onchange=tune;fChainEnhance.onchange=tune;fChainUdp443Policy.onchange=tune;switchTab('main');
-  await Promise.all([loadPanelSettings(),loadCur(),loadStatus(),loadXrayVersions()]);
-  if(!forceReset)loadData();
+  await Promise.all([loadPanelSettings(),loadCur(),loadStatus()]);
+  if(!forceReset) loadData();
+  // 版本列表可能受外网影响较慢，改为后台加载，避免拖慢登录后节点显示
+  loadXrayVersions();
   setInterval(loadStatus,15000);
   setInterval(()=>{if(!forceReset && !modal.classList.contains('show') && !qrModal.classList.contains('show')) loadData();},10000);
 }
