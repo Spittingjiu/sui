@@ -381,21 +381,50 @@ function xrayApiRemoveInboundByTag(tag) {
 }
 
 function parseDomainFilter(raw = '') {
-  return String(raw || '')
-    .split(/[\n,]+/)
-    .map(s => s.trim().toLowerCase())
-    .filter(Boolean)
-    .map((d) => {
-      // 规则：
-      // 1) .example.com -> 子域泛匹配（domain:example.com）
-      // 2) example.com  -> 根域+子域（domain:example.com）
-      // 3) a.b.com      -> 精确匹配（full:a.b.com）
-      const clean = d.replace(/^\.+/, '');
-      const labels = clean.split('.').filter(Boolean);
-      if (d.startsWith('.')) return `domain:${clean}`;
-      if (labels.length <= 2) return `domain:${clean}`;
-      return `full:${clean}`;
-    });
+  const out = [];
+  const seen = new Set();
+
+  const push = (v) => {
+    if (!v || seen.has(v)) return;
+    seen.add(v);
+    out.push(v);
+  };
+
+  for (const part of String(raw || '').split(/[\n,，;；\s]+/)) {
+    let d = String(part || '').trim().toLowerCase();
+    if (!d) continue;
+
+    // 支持用户直接粘贴 URL / host:port / 带路径
+    // 例如: https://chat.openai.com/a/b -> chat.openai.com
+    d = d.replace(/^https?:\/\//, '');
+    d = d.replace(/^wss?:\/\//, '');
+    d = d.replace(/[/?#].*$/, '');
+    d = d.replace(/:\d+$/, '');
+
+    // 支持已有前缀写法
+    if (d.startsWith('domain:') || d.startsWith('full:')) {
+      const pref = d.startsWith('domain:') ? 'domain:' : 'full:';
+      const host = d.slice(pref.length).replace(/^\*?\.?/, '').replace(/^\.+/, '').replace(/\.+$/, '');
+      if (host && /^[a-z0-9.-]+$/.test(host) && host.includes('.')) push(pref + host);
+      continue;
+    }
+
+    // 支持 *.example.com / .example.com
+    const wildcard = d.startsWith('*.') || d.startsWith('.');
+    d = d.replace(/^\*?\.?/, '').replace(/^\.+/, '').replace(/\.+$/, '');
+
+    // 过滤明显非法输入
+    if (!d || !/^[a-z0-9.-]+$/.test(d) || !d.includes('.')) continue;
+
+    // 规则：
+    // - *.example.com / .example.com / example.com -> domain:example.com
+    // - a.b.c.com -> full:a.b.c.com（更精准）
+    const labels = d.split('.').filter(Boolean);
+    if (wildcard || labels.length <= 2) push(`domain:${d}`);
+    else push(`full:${d}`);
+  }
+
+  return out;
 }
 
 function buildChainOutbound(ib) {

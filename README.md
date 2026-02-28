@@ -62,12 +62,14 @@ sui
 在“节点管理 → 编辑节点”里可直接配置，不需要手改 Xray 配置文件：
 
 - 开启“链式代理”后，绑定 1 个下游节点（`http` / `socks5` / `reality(vless)` / `shadowsocks`）
-- 可填写“域名规则”：
+- 可填写“域名规则”（支持直接粘贴 URL，后端会自动清洗）：
   - `example.com` → 匹配根域 + 子域
   - `api.example.com` → 精确匹配该子域
-  - `.example.com` → 子域泛匹配
-- 多域名支持两种分隔：
-  - 逗号：`example.com,api.example.com,.demo.net`
+  - `.example.com` / `*.example.com` → 子域泛匹配
+  - `https://chat.openai.com/` / `wss://a.b.com:443/path` → 自动提取域名后匹配
+- 多域名支持多种分隔：
+  - 逗号（中英文都行）：`example.com,api.example.com，.demo.net`
+  - 分号（中英文都行）或空格
   - 换行：一行一个
 - 开启“域名分流增强（推荐）”后，后端会自动：
   - 开启入站 sniff 路由增强
