@@ -217,9 +217,19 @@ function xrayApiRemoveInboundByTag(tag) {
 function parseDomainFilter(raw = '') {
   return String(raw || '')
     .split(/[\n,]+/)
-    .map(s => s.trim())
+    .map(s => s.trim().toLowerCase())
     .filter(Boolean)
-    .map(d => d.startsWith('.') ? `domain:${d.slice(1)}` : `domain:${d}`);
+    .map((d) => {
+      // 规则：
+      // 1) .example.com -> 子域泛匹配（domain:example.com）
+      // 2) example.com  -> 根域+子域（domain:example.com）
+      // 3) a.b.com      -> 精确匹配（full:a.b.com）
+      const clean = d.replace(/^\.+/, '');
+      const labels = clean.split('.').filter(Boolean);
+      if (d.startsWith('.')) return `domain:${clean}`;
+      if (labels.length <= 2) return `domain:${clean}`;
+      return `full:${clean}`;
+    });
 }
 
 function buildChainOutbound(ib) {
