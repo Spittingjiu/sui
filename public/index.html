@@ -517,7 +517,7 @@
       <b><i class="fa fa-heartbeat"></i> 服务状态</b>
       <span id="sp" class="badge">面板:-</span>
       <span id="sx" class="badge">Xray:-</span>
-      <span id="si" class="badge">节点:-</span>
+      
     </div>
 
     <div id="list"></div>
@@ -654,7 +654,7 @@ function notify(_msg,_type='ok',_ms=2200){return}
 
 const sniPool=['www.lovelive-anime.jp','addons.mozilla.org','www.icloud.com','www.microsoft.com','www.apple.com','www.bing.com','www.amazon.com'];
 const q=$('q'), list=$('list'), cv=$('cv'), mt=$('mt'), login=$('login'), app=$('app'), lu=$('lu'), lp=$('lp'), le=$('le');
-const qrModal=$('qrModal'), qrImg=$('qrImg'), qrLink=$('qrLink'), sp=$('sp'), sx=$('sx'), si=$('si');
+const qrModal=$('qrModal'), qrImg=$('qrImg'), qrLink=$('qrLink'), sp=$('sp'), sx=$('sx');
 const fForwardProtocol=$('f_forward_protocol'), fForwardTargetHost=$('f_forward_target_host'), fForwardTargetPort=$('f_forward_target_port');
 const fUser=$('f_user');
 const fAuthEnabled=$('f_auth_enabled');
@@ -805,7 +805,7 @@ async function loadCur(){const r=await api('/api/system/xray/version-current');i
 
 // 加载状态
 let __lastStatus='';
-async function loadStatus(){const r=await api('/api/system/status');if(!r.success){if((r.msg||'').includes('unauthorized')){sp.textContent='面板:未登录';sx.textContent='Xray:未登录';si.textContent='节点:-';sp.className='badge status-bad';sx.className='badge status-bad';return;}sp.textContent='面板:检测中';sx.textContent='Xray:检测中';si.textContent='节点:检测中';sp.className='badge';sx.className='badge';return;}const o=r.obj||{};const ok=v=>v==='active';const ptxt=ok(o.panel?.active)?'正常':'不正常';const xtxt=ok(o.xray?.active)?'正常':'不正常';const nodeTxt=`${(o.inboundsEnabled??'-')}/${(o.inboundsTotal??'-')}`;const xrayTxt=`${xtxt}${o.xrayVersion?(' · '+o.xrayVersion):''}`;const next=`${ptxt}|${xrayTxt}|${nodeTxt}`;if(next===__lastStatus)return;__lastStatus=next;sp.textContent=`面板:${ptxt}`;sp.className='badge '+(ok(o.panel?.active)?'status-ok':'status-bad');sx.textContent=`Xray:${xrayTxt}`;sx.className='badge '+(ok(o.xray?.active)?'status-ok':'status-bad');si.textContent=`节点:${nodeTxt}`}
+async function loadStatus(){const r=await api('/api/system/status');if(!r.success){if((r.msg||'').includes('unauthorized')){sp.textContent='面板:未登录';sx.textContent='Xray:未登录';sp.className='badge status-bad';sx.className='badge status-bad';return;}sp.textContent='面板:检测中';sx.textContent='Xray:检测中';sp.className='badge';sx.className='badge';return;}const o=r.obj||{};const ok=v=>v==='active';const ptxt=ok(o.panel?.active)?'正常':'不正常';const xtxt=ok(o.xray?.active)?'正常':'不正常';const xrayTxt=`${xtxt}${o.xrayVersion?(' · '+o.xrayVersion):''}`;const next=`${ptxt}|${xrayTxt}`;if(next===__lastStatus)return;__lastStatus=next;sp.textContent=`面板:${ptxt}`;sp.className='badge '+(ok(o.panel?.active)?'status-ok':'status-bad');sx.textContent=`Xray:${xrayTxt}`;sx.className='badge '+(ok(o.xray?.active)?'status-ok':'status-bad');}
 
 async function loadXrayVersions(){
   const [cur,vers]=await Promise.all([api('/api/system/xray/version-current'),api('/api/system/xray/versions')]);
