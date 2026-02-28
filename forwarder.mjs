@@ -4,8 +4,11 @@ import { spawn } from 'node:child_process';
 const RULES_FILE = process.env.SUI_FORWARD_RULES_FILE || '/opt/sui-panel/data/forwards.json';
 const SOCAT_BIN = process.env.SUI_SOCAT_BIN || '/usr/bin/socat';
 const RELOAD_INTERVAL_MS = Number(process.env.SUI_FORWARD_RELOAD_MS || 5000);
+const START_CONCURRENCY = Number(process.env.SUI_FORWARD_START_CONCURRENCY || 4);
 
 const procs = new Map(); // key => child
+const startQueue = [];
+let startTimer = null;
 
 function log(...args) { console.log('[forwarder]', ...args); }
 
@@ -54,6 +57,24 @@ function spawnSocat(rule, proto) {
   return child;
 }
 
+function pumpStartQueue() {
+  if (startTimer) return;
+  startTimer = setInterval(() => {
+    let n = 0;
+    while (n < START_CONCURRENCY && startQueue.length) {
+      const job = startQueue.shift();
+      const child = spawnSocat(job.rule, job.proto);
+      procs.set(job.key, child);
+      log('started', job.key);
+      n++;
+    }
+    if (!startQueue.length && startTimer) {
+      clearInterval(startTimer);
+      startTimer = null;
+    }
+  }, 120);
+}
+
 function reconcile() {
   const rules = loadRules();
   const desired = new Map();
@@ -71,14 +92,14 @@ function reconcile() {
     }
   }
 
-  // start missing
+  // start missing (queued to avoid burst spawning)
   for (const [key, rule] of desired.entries()) {
     if (procs.has(key)) continue;
+    if (startQueue.find(x => x.key === key)) continue;
     const proto = key.endsWith(':udp') ? 'udp' : 'tcp';
-    const child = spawnSocat(rule, proto);
-    procs.set(key, child);
-    log('started', key);
+    startQueue.push({ key, rule, proto });
   }
+  pumpStartQueue();
 }
 
 function shutdown() {

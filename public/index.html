@@ -782,7 +782,8 @@ async function switchXrayVersion(){
 async function init(){let __qTimer=null;q.oninput=()=>{clearTimeout(__qTimer);__qTimer=setTimeout(render,120)};f_protocol.onchange=tune;f_network.onchange=tune;f_security.onchange=tune;fChainEnabled.onchange=tune;fChainType.onchange=tune;fChainEnhance.onchange=tune;fChainUdp443Policy.onchange=tune;switchTab('main');
   await Promise.all([loadPanelSettings(),loadCur(),loadStatus(),loadXrayVersions()]);
   if(!forceReset)loadData();
-  setInterval(loadStatus,15000)
+  setInterval(loadStatus,15000);
+  setInterval(()=>{if(!forceReset && !modal.classList.contains('show') && !qrModal.classList.contains('show')) loadData();},10000);
 }
 
 // 页面启动逻辑（保留原有逻辑）
