@@ -1066,6 +1066,22 @@ app.post('/api/system/chain/test', async (req, res) => {
   }
 });
 
+app.post('/api/system/traffic/reset', async (_req, res) => {
+  try {
+    refreshInboundTraffic();
+    for (const ib of state.inbounds) {
+      const rawUp = Number(ib.trafficRawUp || 0);
+      const rawDown = Number(ib.trafficRawDown || 0);
+      ib.trafficOffsetUp = -rawUp;
+      ib.trafficOffsetDown = -rawDown;
+      ib.up = 0;
+      ib.down = 0;
+    }
+    writeState(true);
+    res.json({ success: true, msg: 'traffic stats reset' });
+  } catch (e) { res.status(500).json({ success: false, msg: e.message }); }
+});
+
 app.post('/api/system/restart-xray', async (_req, res) => {
   try { runSystemctl(`restart ${XRAY_SERVICE}`, { dedupKey: `restart:${XRAY_SERVICE}`, dedupMs: 500 }); res.json({ success: true, msg: 'xray restarted' }); }
   catch (e) { res.status(500).json({ success: false, msg: e.message }); }
