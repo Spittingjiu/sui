@@ -15,6 +15,9 @@ SUI Panel 是一个面向真实运维场景的 Xray 管理面板，目标很直�
 - 自动生成并维护 Xray 配置
 - systemd 服务联动管理（`sui-panel.service` / `sui-xray-core.service`）
 - 节点链接与二维码生成
+- 链式代理（单节点绑定 1 个下游：`http` / `socks5` / `reality(vless)` / `shadowsocks`）
+- 下游连通性测试（面板内一键测试 host/port）
+- 域名分流增强模式（后端自动写路由，无需手改配置）
 
 ## ⚡ 一键安装（推荐）
 
@@ -52,6 +55,23 @@ sui
 - 转发数据：`/opt/sui-panel/forwards.json`
 - 面板设置：`/opt/sui-panel/panel-settings.json`
 - Xray 配置：`/etc/sui-xray/config.json`
+
+## 🔀 链式代理与域名分流（新）
+
+在“节点管理 → 编辑节点”里可直接配置，不需要手改 Xray 配置文件：
+
+- 开启“链式代理”后，绑定 1 个下游节点（`http` / `socks5` / `reality(vless)` / `shadowsocks`）
+- 可填写“域名规则”：
+  - `example.com` → 匹配根域 + 子域
+  - `api.example.com` → 精确匹配该子域
+  - `.example.com` → 子域泛匹配
+- 多域名支持两种分隔：
+  - 逗号：`example.com,api.example.com,.demo.net`
+  - 换行：一行一个
+- 开启“域名分流增强（推荐）”后，后端会自动：
+  - 开启入站 sniff 路由增强
+  - 设置 `domainStrategy=IPIfNonMatch`
+  - 应用 UDP/443 策略（默认拦截，减少 QUIC 绕过）
 
 ## 🔐 注意事项
 
