@@ -745,6 +745,10 @@ app.post('/api/panel/change-password', (req, res) => {
   } catch (e) { res.status(500).json({ success: false, msg: e.message }); }
 });
 
+const TRAFFIC_REFRESH_INTERVAL_MS = Number(process.env.SUI_TRAFFIC_REFRESH_MS || 8000);
+let lastTrafficRefreshAt = 0;
+let trafficRefreshRunning = false;
+
 function refreshInboundTraffic() {
   try {
     const out = shell(`${XRAY_BIN} api statsquery --server=127.0.0.1:10085 -pattern 'inbound>>>' 2>/dev/null || true`);
@@ -770,8 +774,21 @@ function refreshInboundTraffic() {
   } catch {}
 }
 
+function scheduleTrafficRefresh(force = false) {
+  const now = Date.now();
+  if (trafficRefreshRunning) return;
+  if (!force && (now - lastTrafficRefreshAt) < TRAFFIC_REFRESH_INTERVAL_MS) return;
+  trafficRefreshRunning = true;
+  setImmediate(() => {
+    try { refreshInboundTraffic(); } finally {
+      lastTrafficRefreshAt = Date.now();
+      trafficRefreshRunning = false;
+    }
+  });
+}
+
 app.get('/api/inbounds', async (_req, res) => {
-  refreshInboundTraffic();
+  scheduleTrafficRefresh(false);
   res.json({ success: true, obj: state.inbounds.sort((a,b)=>a.id-b.id) });
 });
 app.get('/api/inbounds/next-port', async (_req, res) => {
@@ -1193,6 +1210,9 @@ app.get('/api/inbounds/:id/qr', async (req, res) => {
 });
 
 loadState();
+// 后台刷新流量统计，避免首屏节点列表被阻塞
+scheduleTrafficRefresh(true);
+setInterval(() => scheduleTrafficRefresh(true), TRAFFIC_REFRESH_INTERVAL_MS);
 
 const canUseTls = PANEL_TLS_ENABLE && PANEL_TLS_CERT && PANEL_TLS_KEY && fs.existsSync(PANEL_TLS_CERT) && fs.existsSync(PANEL_TLS_KEY);
 if (canUseTls) {

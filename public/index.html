@@ -696,9 +696,24 @@ async function changePanelPassword(){const np=(setNewPass.value||'').trim();if(n
 
 // 数据格式化（保留原有逻辑）
 function bytes(n){n=Number(n||0);if(n<1024)return n+'B';if(n<1048576)return(n/1024).toFixed(1)+'KB';if(n<1073741824)return(n/1048576).toFixed(1)+'MB';return(n/1073741824).toFixed(2)+'GB';}
+function showLoadingRows(){
+  if(!list) return;
+  list.innerHTML='<div class="card">节点加载中…</div><div class="card">节点加载中…</div>';
+}
+function warmRenderFromCache(){
+  try{
+    const raw=localStorage.getItem('sui_inbounds_cache')||'';
+    if(!raw) return;
+    const cached=JSON.parse(raw);
+    if(Array.isArray(cached) && cached.length){
+      all=cached;
+      render();
+    }
+  }catch{}
+}
 
 // 加载节点数据（保留原有逻辑）
-async function loadData(){const [d,f]=await Promise.all([api('/api/inbounds'),api('/api/forwards')]);if(!d.success){if((d.msg||'').includes('unauthorized')){localStorage.removeItem('sessionToken');app.style.display='none';login.style.display='block';}if(d.code==='RESET_REQUIRED'){forceReset=true;switchTab('settings');forceResetTip.style.display='block';}list.innerHTML='<div class="card">加载失败：'+(d.msg||'未授权')+'</div>';return;}all=d.obj||[];forwards=f.success?(f.obj||[]):[];render();}
+async function loadData(){if(!all.length&&!forwards.length)showLoadingRows();const [d,f]=await Promise.all([api('/api/inbounds'),api('/api/forwards')]);if(!d.success){if((d.msg||'').includes('unauthorized')){localStorage.removeItem('sessionToken');app.style.display='none';login.style.display='block';}if(d.code==='RESET_REQUIRED'){forceReset=true;switchTab('settings');forceResetTip.style.display='block';}list.innerHTML='<div class="card">加载失败：'+(d.msg||'未授权')+'</div>';return;}all=d.obj||[];forwards=f.success?(f.obj||[]):[];try{localStorage.setItem('sui_inbounds_cache',JSON.stringify(all.slice(0,120)));}catch{}render();}
 function upsertById(arr,item){const i=arr.findIndex(x=>x.id===item.id);if(i>=0)arr[i]=item;else arr.unshift(item)}
 function removeById(arr,id){const i=arr.findIndex(x=>x.id===id);if(i>=0)arr.splice(i,1)}
 
@@ -784,7 +799,10 @@ async function switchXrayVersion(){
 // 初始化（保留原有逻辑）
 async function init(){let __qTimer=null;q.oninput=()=>{clearTimeout(__qTimer);__qTimer=setTimeout(render,120)};f_protocol.onchange=tune;f_network.onchange=tune;f_security.onchange=tune;fChainEnabled.onchange=tune;fChainType.onchange=tune;fChainEnhance.onchange=tune;fChainUdp443Policy.onchange=tune;switchTab('main');
   await Promise.all([loadPanelSettings(),loadCur(),loadStatus()]);
-  if(!forceReset) loadData();
+  if(!forceReset){
+    warmRenderFromCache();
+    loadData();
+  }
   // 版本列表可能受外网影响较慢，改为后台加载，避免拖慢登录后节点显示
   loadXrayVersions();
   setInterval(loadStatus,15000);
