@@ -51,11 +51,11 @@ apt_base(){
   if command -v apt-get >/dev/null 2>&1; then
     apt-get -f install -y >/dev/null 2>&1 || true
     apt-get update -y >/dev/null
-    apt-get install -y curl ca-certificates rsync unzip socat nodejs >/dev/null
+    apt-get install -y curl ca-certificates rsync unzip socat >/dev/null
   elif command -v dnf >/dev/null 2>&1; then
-    dnf install -y curl ca-certificates rsync unzip socat nodejs >/dev/null
+    dnf install -y curl ca-certificates rsync unzip socat >/dev/null
   elif command -v yum >/dev/null 2>&1; then
-    yum install -y curl ca-certificates rsync unzip socat nodejs >/dev/null
+    yum install -y curl ca-certificates rsync unzip socat >/dev/null
   else
     err "未找到受支持的包管理器（apt-get/dnf/yum）"
     exit 1
@@ -194,7 +194,7 @@ setup_binary_mode(){
     curl -fsSL --retry 3 -o "$APP_DIR/package-lock.json" "$PANEL_LOCK_URL?t=$(date +%s)" || warn "GitHub 获取 package-lock.json 失败，保留现有文件"
   fi
 
-  (cd "$APP_DIR" && npm install --omit=dev --no-audit --no-fund >/dev/null)
+  # 二进制模式无需 npm 依赖，避免不同发行版 node/npm 版本冲突
   write_version_meta install
 
   cat > "/etc/systemd/system/${SERVICE_NAME}.service" <<EOF
