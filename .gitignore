@@ -3,3 +3,6 @@ node_modules/
 *.log
 .DS_Store
 dist/server.bundle.cjs
+
+# local scratch UI drafts
+public/ui-safe-for-ai-v2.html
