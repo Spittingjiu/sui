@@ -69,6 +69,9 @@ PORT=8810
 PANEL_USER=admin
 PANEL_PASS=admin123
 PANEL_TOKEN=sui2026
+PANEL_TLS_ENABLE=0
+PANEL_TLS_CERT=
+PANEL_TLS_KEY=
 XRAY_PUBLIC_HOST=
 EOF
 }
@@ -339,40 +342,23 @@ EOT
 sysctl --system >/dev/null
 }
 
-setup_panel_https_proxy(){
-  local domain cert_file key_file panel_port caddyfile
-  domain="$1"
-  cert_file="$2"
-  key_file="$3"
-  panel_port=$(grep -E '^PORT=' "$ENV_FILE" 2>/dev/null | tail -n1 | cut -d= -f2-)
-  panel_port=${panel_port:-8810}
+setup_panel_https_native(){
+  local cert_file key_file
+  cert_file="$1"
+  key_file="$2"
 
-  if ! command -v caddy >/dev/null 2>&1; then
-    apt-get update && apt-get install -y caddy
-  fi
+  # 关闭常见反代服务，确保符合“无反代”要求
+  systemctl stop nginx caddy apache2 httpd >/dev/null 2>&1 || true
+  systemctl disable nginx caddy apache2 httpd >/dev/null 2>&1 || true
 
-  # 若已有 Web 服务占用 80/443，先停止，避免 Caddy 启动失败
-  systemctl stop nginx apache2 httpd >/dev/null 2>&1 || true
+  set_kv PORT "443"
+  set_kv PANEL_TLS_ENABLE "1"
+  set_kv PANEL_TLS_CERT "$cert_file"
+  set_kv PANEL_TLS_KEY "$key_file"
 
-  caddyfile=/etc/caddy/Caddyfile
-  cat > "$caddyfile" <<EOC
-${domain} {
-    tls ${cert_file} ${key_file}
-    encode gzip
-    reverse_proxy 127.0.0.1:${panel_port}
-}
-
-http://${domain} {
-    redir https://${domain}{uri} 308
-}
-EOC
-
-  # 让 caddy 用户可读私钥
-  chgrp caddy "$key_file" >/dev/null 2>&1 || true
-  chmod 640 "$key_file" >/dev/null 2>&1 || true
-
-  systemctl enable --now caddy
-  systemctl restart caddy
+  # 证书私钥只允许 root 读取
+  chmod 600 "$key_file" >/dev/null 2>&1 || true
+  reload_apply
 }
 
 issue_tls_cert_and_apply(){
@@ -418,7 +404,7 @@ issue_tls_cert_and_apply(){
   "$acme" --install-cert -d "$domain" --ecc \
     --fullchain-file "$cert_file" \
     --key-file "$key_file" \
-    --reloadcmd "systemctl restart cui-xray-core.service >/dev/null 2>&1 || systemctl restart sui-xray-core.service >/dev/null 2>&1 || true"
+    --reloadcmd "systemctl restart sui-panel.service >/dev/null 2>&1 || true; systemctl restart cui-xray-core.service >/dev/null 2>&1 || systemctl restart sui-xray-core.service >/dev/null 2>&1 || true"
 
   if [[ -s /etc/sui-xray/config.json ]]; then
     CERT_FILE="$cert_file" KEY_FILE="$key_file" python3 - <<'PY'
@@ -452,11 +438,10 @@ PY
     systemctl restart cui-xray-core.service >/dev/null 2>&1 || systemctl restart sui-xray-core.service >/dev/null 2>&1 || true
   fi
 
-  echo "正在配置面板 HTTPS 入口（Caddy 反代到面板端口）..."
-  setup_panel_https_proxy "$domain" "$cert_file" "$key_file"
+  echo "正在配置面板原生 HTTPS（无 Nginx/Caddy 反代）..."
+  setup_panel_https_native "$cert_file" "$key_file"
 
   set_kv XRAY_PUBLIC_HOST "$domain"
-  reload_apply
 
   echo "证书与面板 HTTPS 已完成："
   echo "  cert: $cert_file"
@@ -476,7 +461,7 @@ while true; do
   echo "7) DNS 优化"
   echo "8) 系统网络栈优化"
   echo "9) 一键应用全部优化(6+7+8)"
-  echo "10) 一键SSL（申请证书 + Xray TLS + 面板HTTPS）"
+  echo "10) 一键SSL（申请证书 + Xray TLS + 面板原生HTTPS）"
   echo "11) 检查并更新 SUI 菜单"
   echo "12) 显示当前版本"
   echo "0) 退出"

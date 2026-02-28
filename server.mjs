@@ -2,6 +2,7 @@ import express from 'express';
 import crypto from 'crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import https from 'node:https';
 import { execSync } from 'node:child_process';
 import QRCode from 'qrcode';
 
@@ -10,6 +11,9 @@ const PORT = Number(process.env.PORT || 8810);
 const PANEL_TOKEN = process.env.PANEL_TOKEN || crypto.randomBytes(18).toString('hex');
 const XRAY_PUBLIC_HOST = process.env.XRAY_PUBLIC_HOST || '';
 const PANEL_SERVICE = process.env.PANEL_SERVICE || 'sui-panel.service';
+const PANEL_TLS_ENABLE = ['1', 'true', 'yes', 'on'].includes(String(process.env.PANEL_TLS_ENABLE || '').toLowerCase());
+const PANEL_TLS_CERT = process.env.PANEL_TLS_CERT || '';
+const PANEL_TLS_KEY = process.env.PANEL_TLS_KEY || '';
 
 const DATA_DIR = '/opt/cui-panel';
 const DATA_FILE = path.join(DATA_DIR, 'inbounds.json');
@@ -812,7 +816,22 @@ app.get('/api/inbounds/:id/qr', async (req, res) => {
 });
 
 loadState();
-app.listen(PORT, () => {
-  console.log(`sui-panel on :${PORT}`);
-  console.log(`PANEL_TOKEN=${PANEL_TOKEN}`);
-});
+
+const canUseTls = PANEL_TLS_ENABLE && PANEL_TLS_CERT && PANEL_TLS_KEY && fs.existsSync(PANEL_TLS_CERT) && fs.existsSync(PANEL_TLS_KEY);
+if (canUseTls) {
+  const tlsOptions = {
+    cert: fs.readFileSync(PANEL_TLS_CERT),
+    key: fs.readFileSync(PANEL_TLS_KEY)
+  };
+  https.createServer(tlsOptions, app).listen(PORT, () => {
+    console.log(`sui-panel https on :${PORT}`);
+    console.log(`tls_cert=${PANEL_TLS_CERT}`);
+    console.log(`PANEL_TOKEN=${PANEL_TOKEN}`);
+  });
+} else {
+  app.listen(PORT, () => {
+    console.log(`sui-panel on :${PORT}`);
+    if (PANEL_TLS_ENABLE) console.log('WARN: PANEL_TLS_ENABLE=1 but cert/key missing, fallback to HTTP');
+    console.log(`PANEL_TOKEN=${PANEL_TOKEN}`);
+  });
+}
