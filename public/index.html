@@ -579,6 +579,10 @@
     <select id="f_security"><option>none</option><option>tls</option><option value="reality">reality</option></select>
     <input id="f_email" placeholder="email(tag)" />
 
+    <select id="f_chain_enabled"><option value="0">链式代理：关闭</option><option value="1">链式代理：开启（绑定1个下游）</option></select>
+    <select id="f_chain_type" data-group="chain"><option value="socks5">下游类型 socks5</option><option value="http">下游类型 http</option><option value="reality">下游类型 reality(vless)</option><option value="shadowsocks">下游类型 shadowsocks</option></select>
+    <input id="f_chain_domain" data-group="chain" placeholder="域名规则（可空；支持 openai.com 或 .openai.com，多个可逗号/换行）" />
+
     <input id="f_uuid" placeholder="uuid" data-group="uuid" />
     <input id="f_password" placeholder="password" data-group="password" />
     <input id="f_method" placeholder="method" data-group="method" value="aes-128-gcm" />
@@ -593,12 +597,27 @@
 
     <input id="f_privateKey" placeholder="privateKey" data-group="reality" />
     <input id="f_publicKey" placeholder="publicKey(展示用)" data-group="reality" />
+
+    <input id="f_chain_host" data-group="chain" placeholder="下游地址 host" />
+    <input id="f_chain_port" data-group="chain" placeholder="下游端口 port" />
+    <input id="f_chain_user" data-group="chainAuth" placeholder="下游账号（http/socks可选）" />
+    <input id="f_chain_pass" data-group="chainAuth" placeholder="下游密码（http/socks可选）" />
+
+    <input id="f_chain_uuid" data-group="chainReality" placeholder="Reality 下游 UUID" />
+    <input id="f_chain_server_name" data-group="chainReality" placeholder="Reality SNI / serverName" />
+    <input id="f_chain_public_key" data-group="chainReality" placeholder="Reality publicKey" />
+    <input id="f_chain_short_id" data-group="chainReality" placeholder="Reality shortId" />
+    <input id="f_chain_flow" data-group="chainReality" placeholder="Reality flow(默认 xtls-rprx-vision)" />
+
+    <input id="f_chain_ss_method" data-group="chainSS" placeholder="SS method (默认 aes-128-gcm)" />
+    <input id="f_chain_ss_password" data-group="chainSS" placeholder="SS password" />
   </div>
   <div class="row" style="margin-top:10px">
     <button onclick="genUUID()"><i class="fa fa-random"></i> 生成 UUID</button>
     <button onclick="randSni()"><i class="fa fa-globe"></i> 随机 SNI</button>
     <button onclick="genReality()"><i class="fa fa-key"></i> 生成 Reality 密钥</button>
     <button onclick="applyNodeSpeedPreset()"><i class="fa fa-star"></i> 推荐参数</button>
+    <button onclick="testChainConnectivity()"><i class="fa fa-plug"></i> 测试下游连通性</button>
     <span class="grow"></span>
     <button onclick="submitAdd()"><i class="fa fa-save"></i> 保 存</button>
   </div>
@@ -618,6 +637,9 @@ const sniPool=['www.lovelive-anime.jp','addons.mozilla.org','www.icloud.com','ww
 const q=$('q'), list=$('list'), cv=$('cv'), mt=$('mt'), login=$('login'), app=$('app'), lu=$('lu'), lp=$('lp'), le=$('le');
 const qrModal=$('qrModal'), qrImg=$('qrImg'), qrLink=$('qrLink'), sp=$('sp'), sx=$('sx'), si=$('si');
 const fForwardProtocol=$('f_forward_protocol'), fForwardTargetHost=$('f_forward_target_host'), fForwardTargetPort=$('f_forward_target_port');
+const fChainEnabled=$('f_chain_enabled'), fChainType=$('f_chain_type'), fChainDomain=$('f_chain_domain'), fChainHost=$('f_chain_host'), fChainPort=$('f_chain_port'), fChainUser=$('f_chain_user'), fChainPass=$('f_chain_pass');
+const fChainUUID=$('f_chain_uuid'), fChainServerName=$('f_chain_server_name'), fChainPublicKey=$('f_chain_public_key'), fChainShortId=$('f_chain_short_id'), fChainFlow=$('f_chain_flow');
+const fChainSSMethod=$('f_chain_ss_method'), fChainSSPassword=$('f_chain_ss_password');
 const tabMain=$('tab-main'), tabSettings=$('tab-settings'), tabXray=$('tab-xray'), forceResetTip=$('forceResetTip');
 const setUser=$('set_user'), setPath=$('set_path'), setOldPass=$('set_old_pass'), setNewPass=$('set_new_pass');
 const xvNow=$('xvNow'), xvSel=$('xvSel'), xvManual=$('xvManual'), xvHint=$('xvHint');
@@ -668,7 +690,7 @@ async function showQR(id){const r=await api('/api/inbounds/'+id+'/qr');if(!r.suc
 
 // 表单显隐控制（保留原有逻辑）
 function setVis(el,show){el.style.display=show?'':'none'}
-function tune(){const p=f_protocol.value,n=f_network.value;const isForward=p==='forward';if(p==='shadowsocks'||isForward){f_security.value='none';f_security.disabled=true;}else{f_security.disabled=false;}f_network.disabled=isForward;const s=f_security.value;const sh={uuid:(p==='vless'||p==='vmess'),password:(p==='trojan'||p==='shadowsocks'),method:(p==='shadowsocks'),flow:(p==='vless'),ws:(!isForward&&n==='ws'),tls:(!isForward&&(s==='tls'||s==='reality')),reality:(!isForward&&s==='reality'),forward:isForward};document.querySelectorAll('[data-group]').forEach(el=>setVis(el,!!(sh[el.dataset.group] ?? sh[(el.dataset.group||"").replace("-","_")])))}
+function tune(){const p=f_protocol.value,n=f_network.value;const isForward=p==='forward';if(p==='shadowsocks'||isForward){f_security.value='none';f_security.disabled=true;}else{f_security.disabled=false;}f_network.disabled=isForward;const s=f_security.value;const chainOn=fChainEnabled.value==='1';const chainType=fChainType.value;const sh={uuid:(p==='vless'||p==='vmess'),password:(p==='trojan'||p==='shadowsocks'),method:(p==='shadowsocks'),flow:(p==='vless'),ws:(!isForward&&n==='ws'),tls:(!isForward&&(s==='tls'||s==='reality')),reality:(!isForward&&s==='reality'),forward:isForward,chain:chainOn,chainAuth:chainOn&&(chainType==='socks5'||chainType==='http'),chainReality:chainOn&&chainType==='reality',chainSS:chainOn&&chainType==='shadowsocks'};document.querySelectorAll('[data-group]').forEach(el=>setVis(el,!!(sh[el.dataset.group] ?? sh[(el.dataset.group||"").replace("-","_")])))}
 
 // 工具函数（保留原有逻辑）
 function genUUID(){f_uuid.value=(crypto.randomUUID?crypto.randomUUID():'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx').replace(/[xy]/g,c=>{const r=Math.random()*16|0,v=c==='x'?r:(r&0x3|0x8);return v.toString(16)})}
@@ -676,13 +698,13 @@ function randSni(){const s=sniPool[Math.floor(Math.random()*sniPool.length)];f_s
 async function genReality(){const r=await api('/api/system/xray/reality-gen');if(!r.success)return alert(r.msg||'生成 Reality 密钥失败');f_privateKey.value=r.obj.privateKey||'';f_publicKey.value=r.obj.publicKey||'';f_shortId.value=r.obj.shortId||'';if(!f_sni.value)randSni();if(!f_uuid.value)genUUID();if(!f_flow.value)f_flow.value='xtls-rprx-vision'}
 
 // 新增/编辑节点（保留原有逻辑）
-async function openAdd(){editId=null;mt.innerHTML='<i class="fa fa-plus-circle"></i> 新增节点';modal.classList.add('show');const p=await api('/api/inbounds/next-port');if(p.success)f_port.value=p.obj;fForwardProtocol.value='tcp';fForwardTargetHost.value='';fForwardTargetPort.value='';genUUID();tune()}
-function fill(n){const st=JSON.parse(n.settings||'{}'),ss=JSON.parse(n.streamSettings||'{}'),c=(st.clients||[])[0]||{};f_remark.value=n.remark||'';f_port.value=n.port||'';f_protocol.value=n.protocol||'vless';f_network.value=ss.network||'tcp';f_security.value=ss.security||'none';f_email.value=c.email||'';f_uuid.value=c.id||'';f_password.value=c.password||'';f_method.value=c.method||'aes-128-gcm';f_flow.value=c.flow||'';f_path.value=ss.wsSettings?.path||'/';f_host.value=ss.wsSettings?.headers?.Host||'';f_sni.value=ss.tlsSettings?.serverName||ss.realitySettings?.serverNames?.[0]||'';f_realityDest.value=ss.realitySettings?.dest||'';f_shortId.value=(ss.realitySettings?.shortIds||[])[0]||'';f_privateKey.value=ss.realitySettings?.privateKey||'';f_publicKey.value='';tune()}
+async function openAdd(){editId=null;mt.innerHTML='<i class="fa fa-plus-circle"></i> 新增节点';modal.classList.add('show');const p=await api('/api/inbounds/next-port');if(p.success)f_port.value=p.obj;fForwardProtocol.value='tcp';fForwardTargetHost.value='';fForwardTargetPort.value='';fChainEnabled.value='0';fChainType.value='socks5';fChainDomain.value='';fChainHost.value='';fChainPort.value='';fChainUser.value='';fChainPass.value='';fChainUUID.value='';fChainServerName.value='';fChainPublicKey.value='';fChainShortId.value='';fChainFlow.value='';fChainSSMethod.value='aes-128-gcm';fChainSSPassword.value='';genUUID();tune()}
+function fill(n){const st=JSON.parse(n.settings||'{}'),ss=JSON.parse(n.streamSettings||'{}'),c=(st.clients||[])[0]||{};const ch=n.chain||{};f_remark.value=n.remark||'';f_port.value=n.port||'';f_protocol.value=n.protocol||'vless';f_network.value=ss.network||'tcp';f_security.value=ss.security||'none';f_email.value=c.email||'';f_uuid.value=c.id||'';f_password.value=c.password||'';f_method.value=c.method||'aes-128-gcm';f_flow.value=c.flow||'';f_path.value=ss.wsSettings?.path||'/';f_host.value=ss.wsSettings?.headers?.Host||'';f_sni.value=ss.tlsSettings?.serverName||ss.realitySettings?.serverNames?.[0]||'';f_realityDest.value=ss.realitySettings?.dest||'';f_shortId.value=(ss.realitySettings?.shortIds||[])[0]||'';f_privateKey.value=ss.realitySettings?.privateKey||'';f_publicKey.value='';fChainEnabled.value=ch.enabled?'1':'0';fChainType.value=ch.type||'socks5';fChainDomain.value=ch.domainFilter||'';fChainHost.value=ch.host||'';fChainPort.value=ch.port||'';fChainUser.value=ch.user||'';fChainPass.value=ch.pass||'';fChainUUID.value=ch.uuid||'';fChainServerName.value=ch.serverName||'';fChainPublicKey.value=ch.publicKey||'';fChainShortId.value=ch.shortId||'';fChainFlow.value=ch.flow||'';fChainSSMethod.value=ch.method||'aes-128-gcm';fChainSSPassword.value=ch.password||'';tune()}
 async function openEdit(id){const n=all.find(x=>x.id===id);if(!n)return;editId=id;mt.innerHTML='<i class="fa fa-pencil"></i> 编辑节点';modal.classList.add('show');fill(n)}
 function closeM(){modal.classList.remove('show')}
 
 // 提交节点（保留原有逻辑）
-async function submitAdd(){const proto=f_protocol.value;if(proto==='forward'){const listenPort=Number(f_port.value||0),targetHost=(fForwardTargetHost.value||'').trim(),targetPort=Number(fForwardTargetPort.value||0),protocol=(fForwardProtocol.value||'tcp');if(!listenPort||!targetHost||!targetPort)return alert('请填写监听端口/目标IP/目标端口');const fr=await api('/api/forwards',{method:'POST',body:JSON.stringify({listenPort,targetHost,targetPort,protocol,remark:(f_remark.value||'')})});if(!fr.success)return alert(fr.msg||'端口转发创建失败');closeM();alert(protocol==='both'?'TCP+UDP 端口转发创建成功（单条）':'端口转发创建成功');return;}const b={remark:f_remark.value,port:f_port.value,protocol:proto,network:f_network.value,security:f_security.value,email:f_email.value,uuid:f_uuid.value,password:f_password.value,method:f_method.value,flow:f_flow.value,path:f_path.value,host:f_host.value,sni:f_sni.value,realityDest:f_realityDest.value,shortId:f_shortId.value,privateKey:f_privateKey.value};const url=editId?('/api/inbounds/'+editId+'/full'):'/api/inbounds/add';const m=editId?'PUT':'POST';const r=await api(url,{method:m,body:JSON.stringify(b)});if(!r.success)return alert(r.msg||'操作失败');closeM();loadData()}
+async function submitAdd(){const proto=f_protocol.value;if(proto==='forward'){const listenPort=Number(f_port.value||0),targetHost=(fForwardTargetHost.value||'').trim(),targetPort=Number(fForwardTargetPort.value||0),protocol=(fForwardProtocol.value||'tcp');if(!listenPort||!targetHost||!targetPort)return alert('请填写监听端口/目标IP/目标端口');const fr=await api('/api/forwards',{method:'POST',body:JSON.stringify({listenPort,targetHost,targetPort,protocol,remark:(f_remark.value||'')})});if(!fr.success)return alert(fr.msg||'端口转发创建失败');closeM();alert(protocol==='both'?'TCP+UDP 端口转发创建成功（单条）':'端口转发创建成功');return;}const chainEnabled=fChainEnabled.value==='1';const chain={enabled:chainEnabled,type:fChainType.value,host:(fChainHost.value||'').trim(),port:Number(fChainPort.value||0),domainFilter:(fChainDomain.value||'').trim(),user:(fChainUser.value||'').trim(),pass:fChainPass.value||'',uuid:(fChainUUID.value||'').trim(),serverName:(fChainServerName.value||'').trim(),publicKey:(fChainPublicKey.value||'').trim(),shortId:(fChainShortId.value||'').trim(),flow:(fChainFlow.value||'').trim(),method:(fChainSSMethod.value||'').trim()||'aes-128-gcm',password:fChainSSPassword.value||''};if(chainEnabled&&(!chain.host||!chain.port))return alert('已开启链式代理，请填写下游 host/port');const b={remark:f_remark.value,port:f_port.value,protocol:proto,network:f_network.value,security:f_security.value,email:f_email.value,uuid:f_uuid.value,password:f_password.value,method:f_method.value,flow:f_flow.value,path:f_path.value,host:f_host.value,sni:f_sni.value,realityDest:f_realityDest.value,shortId:f_shortId.value,privateKey:f_privateKey.value,chain};const url=editId?('/api/inbounds/'+editId+'/full'):'/api/inbounds/add';const m=editId?'PUT':'POST';const r=await api(url,{method:m,body:JSON.stringify(b)});if(!r.success)return alert(r.msg||'操作失败');closeM();loadData()}
 
 // 一键 Reality（保留原有逻辑）
 function randomNodeName(){const a=['sunny','lucky','silver','gentle','swift','quiet','stellar','autumn','velvet','amber'];const b=['bridge','garden','harbor','forest','island','comet','breeze','valley','summit','oasis'];return `${a[Math.floor(Math.random()*a.length)]}-${b[Math.floor(Math.random()*b.length)]}`;}
@@ -691,6 +713,7 @@ async function restartPanel(){if(!confirm('确认重启面板服务？'))return;
 async function restartXray(){if(!confirm('确认重启 Xray 服务？'))return;const r=await api('/api/system/restart-xray',{method:'POST',body:'{}'});if(!r.success)return alert(r.msg||'重启 Xray 失败');alert('Xray 已重启');await Promise.all([loadCur(),loadStatus()])}
 async function loadXrayConfig(){const r=await api('/api/system/xray/config');if(!r.success)return alert(r.msg||'读取配置失败');xrayConfigText.value=r.obj?.content||''}
 async function saveXrayConfig(){const content=(xrayConfigText.value||'').trim();if(!content)return alert('配置内容不能为空');const r=await api('/api/system/xray/config',{method:'POST',body:JSON.stringify({content})});if(!r.success)return alert(r.msg||'保存配置失败');alert(r.msg||'配置保存成功')}
+async function testChainConnectivity(){if(fChainEnabled.value!=='1')return alert('请先开启链式代理');const host=(fChainHost.value||'').trim();const port=Number(fChainPort.value||0);if(!host||!port)return alert('请先填写下游 host/port');const r=await api('/api/system/chain/test',{method:'POST',body:JSON.stringify({host,port})});alert(r.success?'下游连通性正常':(r.msg||'连通性失败'))}
 function applyNodeSpeedPreset(){f_protocol.value='vless';f_network.value='tcp';f_security.value='reality';if(!f_flow.value)f_flow.value='xtls-rprx-vision';if(!f_sni.value)randSni();if(!f_realityDest.value&&f_sni.value)f_realityDest.value=f_sni.value+':443';if(!f_uuid.value)genUUID();tune();alert('已应用推荐参数')}
 
 // 加载引擎信息（保留原有逻辑）
@@ -729,7 +752,7 @@ async function switchXrayVersion(){
 }
 
 // 初始化（保留原有逻辑）
-async function init(){let __qTimer=null;q.oninput=()=>{clearTimeout(__qTimer);__qTimer=setTimeout(render,120)};f_protocol.onchange=tune;f_network.onchange=tune;f_security.onchange=tune;switchTab('main');
+async function init(){let __qTimer=null;q.oninput=()=>{clearTimeout(__qTimer);__qTimer=setTimeout(render,120)};f_protocol.onchange=tune;f_network.onchange=tune;f_security.onchange=tune;fChainEnabled.onchange=tune;fChainType.onchange=tune;switchTab('main');
   await Promise.all([loadPanelSettings(),loadCur(),loadStatus(),loadXrayVersions()]);
   if(!forceReset)loadData();
   setInterval(loadStatus,15000)

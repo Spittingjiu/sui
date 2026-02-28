@@ -131,7 +131,8 @@ function normalizeInbound(x = {}) {
     streamSettings: typeof x.streamSettings === 'string' ? x.streamSettings : (typeof x.stream_settings === 'string' ? x.stream_settings : j(x.streamSettings || {})),
     tag: String(x.tag || `inbound-${Date.now()}-${Math.random().toString(16).slice(2,8)}`),
     sniffing: typeof x.sniffing === 'string' ? x.sniffing : j(x.sniffing || { enabled: true, destOverride: ['http', 'tls', 'quic'], metadataOnly: false, routeOnly: false }),
-    allocate: typeof x.allocate === 'string' ? x.allocate : j(x.allocate || { strategy: 'always', refresh: 5, concurrency: 3 })
+    allocate: typeof x.allocate === 'string' ? x.allocate : j(x.allocate || { strategy: 'always', refresh: 5, concurrency: 3 }),
+    chain: (typeof x.chain === 'string' ? parseJ(x.chain, {}) : (x.chain || {}))
   };
 }
 
@@ -164,7 +165,8 @@ function buildInbound(form = {}) {
     enable: true, expiryTime: Number(form.expiryTime || 0), listen: '', port, protocol,
     settings: j(settings), streamSettings: j(stream), tag: `inbound-${Date.now()}`,
     sniffing: j({ enabled: true, destOverride: ['http', 'tls', 'quic'], metadataOnly: false, routeOnly: false }),
-    allocate: j({ strategy: 'always', refresh: 5, concurrency: 3 })
+    allocate: j({ strategy: 'always', refresh: 5, concurrency: 3 }),
+    chain: form.chain || {}
   });
 }
 
@@ -212,8 +214,91 @@ function xrayApiRemoveInboundByTag(tag) {
   shell(`${XRAY_BIN} api rmi --server=127.0.0.1:10085 ${shellQ(tag)}`);
 }
 
+function parseDomainFilter(raw = '') {
+  return String(raw || '')
+    .split(/[\n,]+/)
+    .map(s => s.trim())
+    .filter(Boolean)
+    .map(d => d.startsWith('.') ? `domain:${d.slice(1)}` : `domain:${d}`);
+}
+
+function buildChainOutbound(ib) {
+  const c = ib.chain || {};
+  if (!c?.enabled || !c?.type || !c?.host || !c?.port) return null;
+  const tag = `chain-out-${ib.id}`;
+  const port = Number(c.port);
+  if (!port) return null;
+
+  if (c.type === 'socks5') {
+    return {
+      tag,
+      protocol: 'socks',
+      settings: { servers: [{ address: String(c.host), port, users: c.user ? [{ user: String(c.user), pass: String(c.pass || '') }] : [] }] }
+    };
+  }
+  if (c.type === 'http') {
+    return {
+      tag,
+      protocol: 'http',
+      settings: { servers: [{ address: String(c.host), port, users: c.user ? [{ user: String(c.user), pass: String(c.pass || '') }] : [] }] }
+    };
+  }
+  if (c.type === 'shadowsocks') {
+    return {
+      tag,
+      protocol: 'shadowsocks',
+      settings: { servers: [{ address: String(c.host), port, method: String(c.method || 'aes-128-gcm'), password: String(c.password || '') }] }
+    };
+  }
+  if (c.type === 'reality') {
+    return {
+      tag,
+      protocol: 'vless',
+      settings: {
+        vnext: [{
+          address: String(c.host),
+          port,
+          users: [{ id: String(c.uuid || ''), encryption: 'none', flow: String(c.flow || 'xtls-rprx-vision') }]
+        }]
+      },
+      streamSettings: {
+        network: 'tcp',
+        security: 'reality',
+        realitySettings: {
+          serverName: String(c.serverName || ''),
+          publicKey: String(c.publicKey || ''),
+          shortId: String(c.shortId || ''),
+          fingerprint: String(c.fingerprint || 'chrome')
+        }
+      }
+    };
+  }
+  return null;
+}
+
 function renderXrayConfig() {
-  const inbounds = state.inbounds.filter(x => x.enable).map((ib) => toRuntimeInbound(ib));
+  const enabledInbounds = state.inbounds.filter(x => x.enable);
+  const inbounds = enabledInbounds.map((ib) => toRuntimeInbound(ib));
+  const outbounds = [
+    { protocol: 'freedom', tag: 'direct' },
+    { protocol: 'blackhole', tag: 'blocked' }
+  ];
+  const rules = [
+    { type: 'field', inboundTag: ['api-in'], outboundTag: 'api' }
+  ];
+
+  for (const ib of enabledInbounds) {
+    const ob = buildChainOutbound(ib);
+    if (!ob) continue;
+    outbounds.push(ob);
+    const domains = parseDomainFilter(ib.chain?.domainFilter || '');
+    if (domains.length) {
+      rules.push({ type: 'field', inboundTag: [ib.tag], domain: domains, outboundTag: ob.tag });
+      rules.push({ type: 'field', inboundTag: [ib.tag], outboundTag: 'direct' });
+    } else {
+      rules.push({ type: 'field', inboundTag: [ib.tag], outboundTag: ob.tag });
+    }
+  }
 
   // xray api stats inlet (local only)
   inbounds.push({
@@ -233,15 +318,8 @@ function renderXrayConfig() {
       system: { statsInboundUplink: true, statsInboundDownlink: true }
     },
     inbounds,
-    outbounds: [
-      { protocol: 'freedom', tag: 'direct' },
-      { protocol: 'blackhole', tag: 'blocked' }
-    ],
-    routing: {
-      rules: [
-        { type: 'field', inboundTag: ['api-in'], outboundTag: 'api' }
-      ]
-    }
+    outbounds,
+    routing: { rules }
   };
 }
 
@@ -592,6 +670,19 @@ app.post('/api/inbounds/batch-toggle', async (req, res) => {
 app.post('/api/system/restart-panel', async (_req, res) => {
   try { shell(`systemctl restart ${PANEL_SERVICE}`); res.json({ success: true, msg: 'panel restarted' }); }
   catch (e) { res.status(500).json({ success: false, msg: e.message }); }
+});
+
+app.post('/api/system/chain/test', async (req, res) => {
+  try {
+    const host = String(req.body?.host || '').trim();
+    const port = Number(req.body?.port || 0);
+    if (!host || !port) return res.status(400).json({ success: false, msg: 'host/port required' });
+    const cmd = `timeout 6 bash -lc 'cat < /dev/null > /dev/tcp/${host}/${port}'`;
+    shell(cmd);
+    res.json({ success: true, msg: '连接成功' });
+  } catch (e) {
+    res.status(500).json({ success: false, msg: '连接失败: ' + (e.message || 'unknown') });
+  }
 });
 
 app.post('/api/system/restart-xray', async (_req, res) => {
