@@ -233,6 +233,12 @@ function flushPendingWrites() {
   try { savePanelSettings(true); } catch {}
   try { writeState(true); } catch {}
   try { writeForwardState(true); } catch {}
+  try {
+    if (xrayApplyTimer) {
+      clearTimeout(xrayApplyTimer);
+      flushXrayApplyQueue();
+    }
+  } catch {}
 }
 
 process.on('SIGINT', () => { flushPendingWrites(); process.exit(0); });
@@ -509,36 +515,59 @@ function renderXrayConfig() {
   };
 }
 
-function applyAndRestart() {
-  writeRenderedXrayConfigOnly();
+function restartXrayService() {
   try { shell(`systemctl restart ${XRAY_SERVICE}`); }
   catch { shell(`systemctl start ${XRAY_SERVICE}`); }
 }
 
-function applyHotAddOrRestart(ib) {
+function applyAndRestart() {
   writeRenderedXrayConfigOnly();
-  try { xrayApiAddInbound(ib); }
-  catch { applyAndRestart(); }
+  restartXrayService();
+}
+
+const XRAY_APPLY_DEBOUNCE_MS = Number(process.env.SUI_XRAY_APPLY_DEBOUNCE_MS || 300);
+let xrayApplyTimer = null;
+let xrayPendingOps = [];
+
+function flushXrayApplyQueue() {
+  const ops = xrayPendingOps;
+  xrayPendingOps = [];
+  xrayApplyTimer = null;
+  if (!ops.length) return;
+
+  writeRenderedXrayConfigOnly();
+  try {
+    for (const op of ops) {
+      if (op.type === 'add') xrayApiAddInbound(op.ib);
+      else if (op.type === 'remove') xrayApiRemoveInboundByTag(op.tag);
+      else if (op.type === 'replace') {
+        if (op.oldTag) xrayApiRemoveInboundByTag(op.oldTag);
+        xrayApiAddInbound(op.newIb);
+      } else if (op.type === 'restart') {
+        restartXrayService();
+      }
+    }
+  } catch {
+    restartXrayService();
+  }
+}
+
+function scheduleXrayApply(op) {
+  xrayPendingOps.push(op);
+  if (xrayApplyTimer) clearTimeout(xrayApplyTimer);
+  xrayApplyTimer = setTimeout(flushXrayApplyQueue, XRAY_APPLY_DEBOUNCE_MS);
+}
+
+function applyHotAddOrRestart(ib) {
+  scheduleXrayApply({ type: 'add', ib });
 }
 
 function applyHotRemoveOrRestart(tag) {
-  writeRenderedXrayConfigOnly();
-  try { xrayApiRemoveInboundByTag(tag); }
-  catch { applyAndRestart(); }
+  scheduleXrayApply({ type: 'remove', tag });
 }
 
 function applyHotReplaceOrRestart(oldTag, newIb) {
-  writeRenderedXrayConfigOnly();
-  try {
-    if (oldTag && oldTag !== newIb.tag) xrayApiRemoveInboundByTag(oldTag);
-    else if (oldTag) {
-      // same tag but params changed: remove first then add
-      xrayApiRemoveInboundByTag(oldTag);
-    }
-    xrayApiAddInbound(newIb);
-  } catch {
-    applyAndRestart();
-  }
+  scheduleXrayApply({ type: 'replace', oldTag, newIb });
 }
 
 function applyBbrFq() {
