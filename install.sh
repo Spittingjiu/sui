@@ -434,16 +434,32 @@ PY
 
 while true; do
   echo "===== SUI 菜单 ====="
-  echo "1) 修改面板用户名"
-  echo "2) 修改面板密码"
+  echo "1) 修改面板账号密码"
+  echo "2) 显示当前面板账号密码"
   echo "3) 修改面板端口"
   echo "4) 启用 BBR + fq"
   echo "5) 一键SSL（申请证书 + Xray TLS + 面板原生HTTPS）"
   echo "0) 退出"
   read -r -p "选择: " c
   case "$c" in
-    1) read -r -p "新用户名: " u; [[ -n "${u:-}" ]] || { echo "用户名不能为空"; read -r -p "回车继续"; continue; }; set_kv PANEL_USER "$u"; reload_apply; echo "用户名已更新"; read -r -p "回车继续" ;;
-    2) read -r -p "新密码: " p; [[ -n "${p:-}" ]] || { echo "密码不能为空"; read -r -p "回车继续"; continue; }; set_kv PANEL_PASS "$p"; reload_apply; echo "密码已更新"; read -r -p "回车继续" ;;
+    1)
+      read -r -p "新用户名: " u
+      [[ -n "${u:-}" ]] || { echo "用户名不能为空"; read -r -p "回车继续"; continue; }
+      read -r -p "新密码: " p
+      [[ -n "${p:-}" ]] || { echo "密码不能为空"; read -r -p "回车继续"; continue; }
+      set_kv PANEL_USER "$u"
+      set_kv PANEL_PASS "$p"
+      reload_apply
+      echo "账号密码已更新"
+      read -r -p "回车继续"
+      ;;
+    2)
+      cu=$(grep -E '^PANEL_USER=' "$ENV_FILE" 2>/dev/null | tail -n1 | cut -d= -f2-)
+      cp=$(grep -E '^PANEL_PASS=' "$ENV_FILE" 2>/dev/null | tail -n1 | cut -d= -f2-)
+      echo "当前用户名: ${cu:-admin}"
+      echo "当前密码: ${cp:-admin123}"
+      read -r -p "回车继续"
+      ;;
     3) read -r -p "新端口: " pt; set_kv PORT "$pt"; reload_apply; echo "已更新端口为 $pt"; read -r -p "回车继续" ;;
     4) opt_bbr; echo "已启用 BBR + fq"; read -r -p "回车继续" ;;
     5) issue_tls_cert_and_apply; read -r -p "回车继续" ;;
