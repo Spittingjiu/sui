@@ -289,57 +289,10 @@ index_sha256=$(sha256sum /opt/sui-panel/public/index.html 2>/dev/null | awk '{pr
 EOV
 }
 
-show_current_version(){
-  echo "--- 当前版本信息 ---"
-  if [[ -s /opt/sui-panel/VERSION ]]; then
-    cat /opt/sui-panel/VERSION
-  else
-    echo "VERSION 文件不存在（可先执行一次 4) 更新 SUI）"
-  fi
-  echo
-  echo "本地文件时间:"
-  stat -c 'sui-panel-bin: %y' "$BIN_PATH" 2>/dev/null || true
-  stat -c 'server.mjs:   %y' /opt/sui-panel/server.mjs 2>/dev/null || true
-  stat -c 'index.html:   %y' /opt/sui-panel/public/index.html 2>/dev/null || true
-}
-
 extract_remote_menu(){
   local remote="$1" out="$2"
   awk 'f{ if($0=="EOF"){exit} print } /cat > \/usr\/local\/bin\/sui <<'\''EOF'\''/{f=1}' "$remote" > "$out"
   [[ -s "$out" ]]
-}
-
-self_update_menu(){
-  local work remote_menu
-  work=$(mktemp -d)
-  remote_menu="$work/sui.remote"
-  if curl -fsSL "$INSTALL_URL" -o "$work/install.sh" && extract_remote_menu "$work/install.sh" "$remote_menu"; then
-    if cmp -s "$remote_menu" /usr/local/bin/sui; then
-      echo "菜单已是最新"
-    else
-      install -m 0755 "$remote_menu" /usr/local/bin/sui
-      echo "菜单已更新到最新版"
-    fi
-  elif [[ -s "$MENU_SOURCE" ]]; then
-    install -m 0755 "$MENU_SOURCE" /usr/local/bin/sui
-    echo "菜单已从本机模板更新"
-  else
-    rm -rf "$work"
-    echo "菜单更新失败"
-    return 1
-  fi
-  rm -rf "$work"
-}
-
-update_sui_bin(){
-  # 统一走“最新安装脚本重装”路径，确保与手工重装效果一致
-  local tmp_inst
-  tmp_inst=$(mktemp)
-  echo "正在拉取最新安装脚本..."
-  curl -fsSL --retry 3 -o "$tmp_inst" "$INSTALL_URL?t=$(date +%s)"
-  echo "开始执行重装（会保留你现有配置，按提示选 Y）..."
-  bash "$tmp_inst"
-  rm -f "$tmp_inst"
 }
 
 opt_bbr(){
@@ -348,28 +301,6 @@ net.core.default_qdisc=fq
 net.ipv4.tcp_congestion_control=bbr
 EOT
 modprobe tcp_bbr || true
-sysctl --system >/dev/null
-}
-
-opt_dns(){
-mkdir -p /etc/systemd/resolved.conf.d
-cat >/etc/systemd/resolved.conf.d/99-sui-dns.conf <<'EOT'
-[Resolve]
-DNS=1.1.1.1 8.8.8.8 2606:4700:4700::1111 2001:4860:4860::8888
-FallbackDNS=9.9.9.9 1.0.0.1 2620:fe::fe 2606:4700:4700::1001
-DNSStubListener=yes
-DNSSEC=no
-EOT
-systemctl restart systemd-resolved || true
-}
-
-opt_sysctl(){
-cat >/etc/sysctl.d/99-sui-net.conf <<'EOT'
-net.core.somaxconn = 4096
-net.core.netdev_max_backlog = 2000
-net.ipv4.tcp_max_syn_backlog = 4096
-net.ipv4.ip_local_port_range = 1024 65535
-EOT
 sysctl --system >/dev/null
 }
 
@@ -506,47 +437,16 @@ while true; do
   echo "1) 修改面板用户名"
   echo "2) 修改面板密码"
   echo "3) 修改面板端口"
-  echo "4) 更新 SUI（面板+二进制）"
-  echo "5) 查看状态（增强）"
-  echo "6) 启用 BBR + fq"
-  echo "7) DNS 优化"
-  echo "8) 系统网络栈优化"
-  echo "9) 一键应用全部优化(6+7+8)"
-  echo "10) 一键SSL（申请证书 + Xray TLS + 面板原生HTTPS）"
-  echo "11) 检查并更新 SUI 菜单"
-  echo "12) 显示当前版本"
+  echo "4) 启用 BBR + fq"
+  echo "5) 一键SSL（申请证书 + Xray TLS + 面板原生HTTPS）"
   echo "0) 退出"
   read -r -p "选择: " c
   case "$c" in
     1) read -r -p "新用户名: " u; [[ -n "${u:-}" ]] || { echo "用户名不能为空"; read -r -p "回车继续"; continue; }; set_kv PANEL_USER "$u"; reload_apply; echo "用户名已更新"; read -r -p "回车继续" ;;
     2) read -r -p "新密码: " p; [[ -n "${p:-}" ]] || { echo "密码不能为空"; read -r -p "回车继续"; continue; }; set_kv PANEL_PASS "$p"; reload_apply; echo "密码已更新"; read -r -p "回车继续" ;;
     3) read -r -p "新端口: " pt; set_kv PORT "$pt"; reload_apply; echo "已更新端口为 $pt"; read -r -p "回车继续" ;;
-    4) update_sui_bin; echo "SUI 面板与二进制已更新并重启"; read -r -p "回车继续" ;;
-    5)
-      echo "--- SUI 状态 ---"
-      current_port=$(grep -E '^PORT=' "$ENV_FILE" 2>/dev/null | tail -n1 | cut -d= -f2-)
-      echo "当前端口: ${current_port:-8810}"
-      if [[ -s /opt/sui-panel/VERSION ]]; then
-        echo "版本摘要: $(grep '^commit=' /opt/sui-panel/VERSION | cut -d= -f2 | cut -c1-12)"
-      fi
-      echo
-      echo "[sui-panel.service]"
-      systemctl --no-pager status "$SERVICE" | sed -n '1,25p' || true
-      echo
-      echo "[sui-xray-core.service]"
-      systemctl --no-pager status sui-xray-core.service | sed -n '1,25p' || true
-      echo
-      echo "[监听端口]"
-      ss -lntp | grep -E ':8810|:443|:80' || true
-      read -r -p "回车继续"
-      ;;
-    6) opt_bbr; echo "已启用 BBR + fq"; read -r -p "回车继续" ;;
-    7) opt_dns; echo "已应用 DNS 优化"; read -r -p "回车继续" ;;
-    8) opt_sysctl; echo "已应用网络栈优化"; read -r -p "回车继续" ;;
-    9) opt_bbr; opt_dns; opt_sysctl; echo "已应用全部优化"; read -r -p "回车继续" ;;
-    10) issue_tls_cert_and_apply; read -r -p "回车继续" ;;
-    11) self_update_menu; read -r -p "回车继续" ;;
-    12) show_current_version; read -r -p "回车继续" ;;
+    4) opt_bbr; echo "已启用 BBR + fq"; read -r -p "回车继续" ;;
+    5) issue_tls_cert_and_apply; read -r -p "回车继续" ;;
     0) exit 0 ;;
   esac
 done
