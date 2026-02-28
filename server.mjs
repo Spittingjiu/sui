@@ -34,6 +34,23 @@ let panelSettings = {
   forceResetPassword: true
 };
 
+const WRITE_DEBOUNCE_MS = Number(process.env.SUI_WRITE_DEBOUNCE_MS || 400);
+let stateFlushTimer = null;
+let forwardFlushTimer = null;
+let panelSettingsFlushTimer = null;
+
+function writeTextAtomic(file, content) {
+  const dir = path.dirname(file);
+  fs.mkdirSync(dir, { recursive: true });
+  const tmp = `${file}.tmp-${process.pid}-${Date.now()}`;
+  fs.writeFileSync(tmp, content);
+  fs.renameSync(tmp, file);
+}
+
+function writeJsonAtomic(file, obj) {
+  writeTextAtomic(file, JSON.stringify(obj, null, 2));
+}
+
 app.use(express.json());
 
 function j(v) { return JSON.stringify(v); }
@@ -47,8 +64,17 @@ function normalizePanelPath(v = '/') {
   p = p.replace(/\/+/g, '/').replace(/\/$/, '');
   return p || '/';
 }
-function savePanelSettings() {
-  fs.writeFileSync(PANEL_SETTINGS_FILE, JSON.stringify(panelSettings, null, 2));
+function savePanelSettings(force = false) {
+  if (force) {
+    if (panelSettingsFlushTimer) { clearTimeout(panelSettingsFlushTimer); panelSettingsFlushTimer = null; }
+    writeJsonAtomic(PANEL_SETTINGS_FILE, panelSettings);
+    return;
+  }
+  if (panelSettingsFlushTimer) clearTimeout(panelSettingsFlushTimer);
+  panelSettingsFlushTimer = setTimeout(() => {
+    panelSettingsFlushTimer = null;
+    writeJsonAtomic(PANEL_SETTINGS_FILE, panelSettings);
+  }, WRITE_DEBOUNCE_MS);
 }
 function loadPanelSettings() {
   if (fs.existsSync(PANEL_SETTINGS_FILE)) {
@@ -105,8 +131,17 @@ function normalizeForwardRule(x = {}) {
   };
 }
 
-function writeForwardState(){
-  fs.writeFileSync(FORWARDS_FILE, JSON.stringify(forwardState, null, 2));
+function writeForwardState(force = false){
+  if (force) {
+    if (forwardFlushTimer) { clearTimeout(forwardFlushTimer); forwardFlushTimer = null; }
+    writeJsonAtomic(FORWARDS_FILE, forwardState);
+    return;
+  }
+  if (forwardFlushTimer) clearTimeout(forwardFlushTimer);
+  forwardFlushTimer = setTimeout(() => {
+    forwardFlushTimer = null;
+    writeJsonAtomic(FORWARDS_FILE, forwardState);
+  }, WRITE_DEBOUNCE_MS);
 }
 
 function forwardUnitName(id, proto){
@@ -142,6 +177,9 @@ function stopAndDisableForwardUnit(name){
 
 function syncForwardServices(){
   const wanted = new Set();
+  const changedUnits = new Set();
+  let needReload = false;
+
   for (const r of (forwardState.rules || [])) {
     const rule = normalizeForwardRule(r);
     if (!rule.id || !rule.listenPort || !rule.targetHost || !rule.targetPort || !rule.enabled) continue;
@@ -151,19 +189,30 @@ function syncForwardServices(){
       wanted.add(unit);
       const unitPath = `/etc/systemd/system/${unit}`;
       const content = renderForwardUnit(rule, proto);
-      if (!fs.existsSync(unitPath) || fs.readFileSync(unitPath, 'utf8') !== content) fs.writeFileSync(unitPath, content);
+      if (!fs.existsSync(unitPath) || fs.readFileSync(unitPath, 'utf8') !== content) {
+        fs.writeFileSync(unitPath, content);
+        changedUnits.add(unit);
+        needReload = true;
+      }
     }
   }
 
   for (const f of fs.readdirSync('/etc/systemd/system')) {
     if (!f.startsWith('sui-forward-') || !f.endsWith('.service')) continue;
-    if (!wanted.has(f)) stopAndDisableForwardUnit(f);
+    if (!wanted.has(f)) {
+      stopAndDisableForwardUnit(f);
+      needReload = true;
+    }
   }
 
-  shell('systemctl daemon-reload');
+  if (needReload) shell('systemctl daemon-reload');
+
   for (const unit of wanted) {
     try { shell(`systemctl enable ${unit}`); } catch {}
-    try { shell(`systemctl restart ${unit}`); } catch {}
+    try {
+      const active = shell(`systemctl is-active ${unit} || true`);
+      if (changedUnits.has(unit) || active !== 'active') shell(`systemctl restart ${unit}`);
+    } catch {}
   }
 }
 
@@ -175,10 +224,20 @@ function loadForwardState(){
     forwardState = { seq: seq > 0 ? seq : 1, rules };
   } else {
     forwardState = { seq: 1, rules: [] };
-    writeForwardState();
+    writeForwardState(true);
   }
   syncForwardServices();
 }
+
+function flushPendingWrites() {
+  try { savePanelSettings(true); } catch {}
+  try { writeState(true); } catch {}
+  try { writeForwardState(true); } catch {}
+}
+
+process.on('SIGINT', () => { flushPendingWrites(); process.exit(0); });
+process.on('SIGTERM', () => { flushPendingWrites(); process.exit(0); });
+process.on('beforeExit', () => { flushPendingWrites(); });
 
 function ensureCoreService() {
   const unitPath = '/etc/systemd/system/sui-xray-core.service';
@@ -261,8 +320,17 @@ function buildInbound(form = {}) {
   });
 }
 
-function writeState() {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(state, null, 2));
+function writeState(force = false) {
+  if (force) {
+    if (stateFlushTimer) { clearTimeout(stateFlushTimer); stateFlushTimer = null; }
+    writeJsonAtomic(DATA_FILE, state);
+    return;
+  }
+  if (stateFlushTimer) clearTimeout(stateFlushTimer);
+  stateFlushTimer = setTimeout(() => {
+    stateFlushTimer = null;
+    writeJsonAtomic(DATA_FILE, state);
+  }, WRITE_DEBOUNCE_MS);
 }
 
 function shellQ(v) {
@@ -285,7 +353,7 @@ function toRuntimeInbound(ib) {
 
 function writeRenderedXrayConfigOnly() {
   const cfg = renderXrayConfig();
-  fs.writeFileSync(XRAY_CONFIG, JSON.stringify(cfg, null, 2));
+  writeJsonAtomic(XRAY_CONFIG, cfg);
   shell(`${XRAY_BIN} run -test -c ${XRAY_CONFIG}`);
 }
 
@@ -555,7 +623,7 @@ function loadState() {
   }
   const migrated = migrateFromXuiDb();
   if (!migrated) state = { seq: 1, inbounds: [] };
-  writeState();
+  writeState(true);
   applyAndRestart();
 }
 
