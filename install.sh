@@ -27,6 +27,7 @@ SERVICE_NAME="sui-panel"
 ENV_FILE="/etc/default/${SERVICE_NAME}"
 BIN_URL="https://raw.githubusercontent.com/Spittingjiu/sui/main/dist/sui-panel-full-linux-amd64"
 SERVER_URL="https://raw.githubusercontent.com/Spittingjiu/sui/main/server.mjs"
+FORWARDER_URL="https://raw.githubusercontent.com/Spittingjiu/sui/main/forwarder.mjs"
 PANEL_INDEX_URL="https://raw.githubusercontent.com/Spittingjiu/sui/main/public/index.html"
 PANEL_PKG_URL="https://raw.githubusercontent.com/Spittingjiu/sui/main/package.json"
 PANEL_LOCK_URL="https://raw.githubusercontent.com/Spittingjiu/sui/main/package-lock.json"
@@ -204,6 +205,7 @@ setup_binary_mode(){
     panel_root=$(dirname "$(find "$tmp" -maxdepth 3 -type f -name server.mjs | head -n1)")
     if [[ -n "${panel_root:-}" && -f "$panel_root/server.mjs" ]]; then
       cp -f "$panel_root/server.mjs" "$APP_DIR/server.mjs"
+      [[ -f "$panel_root/forwarder.mjs" ]] && cp -f "$panel_root/forwarder.mjs" "$APP_DIR/forwarder.mjs"
       [[ -f "$panel_root/public/index.html" ]] && cp -f "$panel_root/public/index.html" "$APP_DIR/public/index.html"
       [[ -f "$panel_root/package.json" ]] && cp -f "$panel_root/package.json" "$APP_DIR/package.json"
       [[ -f "$panel_root/package-lock.json" ]] && cp -f "$panel_root/package-lock.json" "$APP_DIR/package-lock.json"
@@ -212,6 +214,7 @@ setup_binary_mode(){
     fi
     rm -rf "$tmp"
   else
+    curl -fsSL --retry 3 -o "$APP_DIR/forwarder.mjs" "$FORWARDER_URL?t=$(date +%s)" || warn "GitHub 获取 forwarder.mjs 失败，保留现有文件"
     curl -fsSL --retry 3 -o "$APP_DIR/public/index.html" "$PANEL_INDEX_URL?t=$(date +%s)" || warn "GitHub 获取前端失败，保留现有前端文件"
     curl -fsSL --retry 3 -o "$APP_DIR/package.json" "$PANEL_PKG_URL?t=$(date +%s)" || warn "GitHub 获取 package.json 失败，保留现有文件"
     curl -fsSL --retry 3 -o "$APP_DIR/package-lock.json" "$PANEL_LOCK_URL?t=$(date +%s)" || warn "GitHub 获取 package-lock.json 失败，保留现有文件"

@@ -43,6 +43,7 @@ sui
 
 - `install.sh`：一键安装/更新入口（拉取二进制、写 systemd、初始化环境）
 - `server.mjs`：后端核心逻辑（登录鉴权、节点管理、状态查询、转发 API）
+- `forwarder.mjs`：端口转发守护进程（单服务加载规则并管理 socat 子进程）
 - `public/index.html`：前端页面（面板 UI + 调用后端 API）
 - `dist/sui-panel-full-linux-amd64`：最终可执行二进制（生产环境主要运行这个）
 - `README.md`：使用说明文档

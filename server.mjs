@@ -160,75 +160,38 @@ function writeForwardState(force = false){
   }, WRITE_DEBOUNCE_MS);
 }
 
-function forwardUnitName(id, proto){
-  return `sui-forward-${id}-${proto}.service`;
-}
-
-function renderForwardUnit(rule, proto){
-  const isUdp = proto === 'udp';
-  const exec = isUdp
-    ? `/usr/bin/socat -T60 UDP-LISTEN:${rule.listenPort},reuseaddr,fork UDP:${rule.targetHost}:${rule.targetPort}`
-    : `/usr/bin/socat -T60 TCP-LISTEN:${rule.listenPort},reuseaddr,fork TCP:${rule.targetHost}:${rule.targetPort}`;
-  return `[Unit]
-Description=SUI Port Forward ${rule.listenPort}->${rule.targetHost}:${rule.targetPort} (${proto})
-After=network.target
-
-[Service]
-Type=simple
-ExecStart=${exec}
-Restart=always
-RestartSec=1
-User=root
-
-[Install]
-WantedBy=multi-user.target
-`;
-}
-
 function stopAndDisableForwardUnit(name){
   try { runSystemctl(`stop ${name}`, { dedupKey: `stop:${name}`, ignoreError: true }); } catch {}
   try { runSystemctl(`disable ${name}`, { dedupKey: `disable:${name}`, ignoreError: true }); } catch {}
   try { fs.unlinkSync(`/etc/systemd/system/${name}`); } catch {}
 }
 
-function syncForwardServices(){
-  const wanted = new Set();
-  const changedUnits = new Set();
-  let needReload = false;
-
-  for (const r of (forwardState.rules || [])) {
-    const rule = normalizeForwardRule(r);
-    if (!rule.id || !rule.listenPort || !rule.targetHost || !rule.targetPort || !rule.enabled) continue;
-    const protos = rule.protocol === 'both' ? ['tcp','udp'] : [rule.protocol];
-    for (const proto of protos) {
-      const unit = forwardUnitName(rule.id, proto);
-      wanted.add(unit);
-      const unitPath = `/etc/systemd/system/${unit}`;
-      const content = renderForwardUnit(rule, proto);
-      if (!fs.existsSync(unitPath) || fs.readFileSync(unitPath, 'utf8') !== content) {
-        fs.writeFileSync(unitPath, content);
-        changedUnits.add(unit);
-        needReload = true;
-      }
-    }
+function ensureForwardService() {
+  const unitPath = '/etc/systemd/system/sui-forward.service';
+  const unit = `[Unit]\nDescription=SUI Forward Daemon\nAfter=network.target\n\n[Service]\nType=simple\nWorkingDirectory=/opt/sui-panel\nEnvironment=SUI_FORWARD_RULES_FILE=/opt/sui-panel/data/forwards.json\nExecStart=/usr/bin/node /opt/sui-panel/forwarder.mjs\nRestart=always\nRestartSec=1\nUser=root\n\n[Install]\nWantedBy=multi-user.target\n`;
+  if (!fs.existsSync(unitPath) || fs.readFileSync(unitPath, 'utf8') !== unit) {
+    fs.writeFileSync(unitPath, unit);
+    runSystemctl('daemon-reload', { dedupKey: 'daemon-reload', dedupMs: 300, ignoreError: true });
   }
+  runSystemctl('enable sui-forward.service', { dedupKey: 'enable:sui-forward.service', ignoreError: true });
+}
 
+function cleanupLegacyForwardUnits() {
   for (const f of fs.readdirSync('/etc/systemd/system')) {
     if (!f.startsWith('sui-forward-') || !f.endsWith('.service')) continue;
-    if (!wanted.has(f)) {
-      stopAndDisableForwardUnit(f);
-      needReload = true;
-    }
+    stopAndDisableForwardUnit(f);
   }
+  runSystemctl('daemon-reload', { dedupKey: 'daemon-reload', dedupMs: 300, ignoreError: true });
+}
 
-  if (needReload) runSystemctl('daemon-reload', { dedupKey: 'daemon-reload', dedupMs: 300, ignoreError: true });
-
-  for (const unit of wanted) {
-    try { runSystemctl(`enable ${unit}`, { dedupKey: `enable:${unit}`, ignoreError: true }); } catch {}
-    try {
-      const active = shell(`systemctl is-active ${unit} || true`);
-      if (changedUnits.has(unit) || active !== 'active') runSystemctl(`restart ${unit}`, { dedupKey: `restart:${unit}`, dedupMs: 800, ignoreError: true });
-    } catch {}
+function syncForwardServices(){
+  ensureForwardService();
+  cleanupLegacyForwardUnits();
+  const active = shell('systemctl is-active sui-forward.service || true');
+  if (active === 'active') {
+    try { shell('systemctl kill -s HUP sui-forward.service'); } catch {}
+  } else {
+    runSystemctl('restart sui-forward.service', { dedupKey: 'restart:sui-forward.service', dedupMs: 500, ignoreError: true });
   }
 }
 
