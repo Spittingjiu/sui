@@ -117,6 +117,22 @@ function shell(cmd) {
   return execSync(cmd, { shell: '/bin/bash', stdio: 'pipe' }).toString().trim();
 }
 
+const SYSTEMCTL_DEDUP_MS = Number(process.env.SUI_SYSTEMCTL_DEDUP_MS || 1000);
+const systemctlRecent = new Map();
+function runSystemctl(args, opts = {}) {
+  const { dedupKey = args, dedupMs = SYSTEMCTL_DEDUP_MS, ignoreError = false } = opts;
+  const now = Date.now();
+  const last = systemctlRecent.get(dedupKey) || 0;
+  if (dedupMs > 0 && now - last < dedupMs) return '';
+  systemctlRecent.set(dedupKey, now);
+  try {
+    return shell(`systemctl ${args}`);
+  } catch (e) {
+    if (ignoreError) return '';
+    throw e;
+  }
+}
+
 
 function normalizeForwardRule(x = {}) {
   const protocol = String(x.protocol || 'tcp').toLowerCase();
@@ -170,8 +186,8 @@ WantedBy=multi-user.target
 }
 
 function stopAndDisableForwardUnit(name){
-  try { shell(`systemctl stop ${name}`); } catch {}
-  try { shell(`systemctl disable ${name}`); } catch {}
+  try { runSystemctl(`stop ${name}`, { dedupKey: `stop:${name}`, ignoreError: true }); } catch {}
+  try { runSystemctl(`disable ${name}`, { dedupKey: `disable:${name}`, ignoreError: true }); } catch {}
   try { fs.unlinkSync(`/etc/systemd/system/${name}`); } catch {}
 }
 
@@ -205,13 +221,13 @@ function syncForwardServices(){
     }
   }
 
-  if (needReload) shell('systemctl daemon-reload');
+  if (needReload) runSystemctl('daemon-reload', { dedupKey: 'daemon-reload', dedupMs: 300, ignoreError: true });
 
   for (const unit of wanted) {
-    try { shell(`systemctl enable ${unit}`); } catch {}
+    try { runSystemctl(`enable ${unit}`, { dedupKey: `enable:${unit}`, ignoreError: true }); } catch {}
     try {
       const active = shell(`systemctl is-active ${unit} || true`);
-      if (changedUnits.has(unit) || active !== 'active') shell(`systemctl restart ${unit}`);
+      if (changedUnits.has(unit) || active !== 'active') runSystemctl(`restart ${unit}`, { dedupKey: `restart:${unit}`, dedupMs: 800, ignoreError: true });
     } catch {}
   }
 }
@@ -250,9 +266,9 @@ function ensureCoreService() {
   const unit = `[Unit]\nDescription=SUI Self-hosted Xray Core\nAfter=network.target\n\n[Service]\nType=simple\nExecStart=${XRAY_BIN} run -c ${XRAY_CONFIG}\nRestart=always\nRestartSec=2\nUser=root\nLimitNOFILE=1048576\n\n[Install]\nWantedBy=multi-user.target\n`;
   if (!fs.existsSync(unitPath) || fs.readFileSync(unitPath, 'utf8') !== unit) {
     fs.writeFileSync(unitPath, unit);
-    shell('systemctl daemon-reload');
+    runSystemctl('daemon-reload', { dedupKey: 'daemon-reload', dedupMs: 300, ignoreError: true });
   }
-  try { shell(`systemctl enable ${XRAY_SERVICE}`); } catch {}
+  try { runSystemctl(`enable ${XRAY_SERVICE}`, { dedupKey: `enable:${XRAY_SERVICE}`, ignoreError: true }); } catch {}
 }
 
 function nextFreePort(used = new Set(), start = 20000, end = 40000){
@@ -357,10 +373,32 @@ function toRuntimeInbound(ib) {
   return o;
 }
 
+let lastXrayConfigHash = '';
+let xrayApplyLock = false;
+
+function xrayConfigHash(cfg) {
+  const raw = JSON.stringify(cfg);
+  return crypto.createHash('sha256').update(raw).digest('hex');
+}
+
 function writeRenderedXrayConfigOnly() {
   const cfg = renderXrayConfig();
-  writeJsonAtomic(XRAY_CONFIG, cfg);
-  shell(`${XRAY_BIN} run -test -c ${XRAY_CONFIG}`);
+  const hash = xrayConfigHash(cfg);
+  if (hash === lastXrayConfigHash) return { changed: false, hash };
+
+  const bak = `${XRAY_CONFIG}.bak`;
+  try {
+    if (fs.existsSync(XRAY_CONFIG)) fs.copyFileSync(XRAY_CONFIG, bak);
+    writeJsonAtomic(XRAY_CONFIG, cfg);
+    shell(`${XRAY_BIN} run -test -c ${XRAY_CONFIG}`);
+    lastXrayConfigHash = hash;
+    return { changed: true, hash };
+  } catch (e) {
+    if (fs.existsSync(bak)) {
+      try { fs.copyFileSync(bak, XRAY_CONFIG); } catch {}
+    }
+    throw e;
+  }
 }
 
 function xrayApiAddInbound(ib) {
@@ -516,8 +554,8 @@ function renderXrayConfig() {
 }
 
 function restartXrayService() {
-  try { shell(`systemctl restart ${XRAY_SERVICE}`); }
-  catch { shell(`systemctl start ${XRAY_SERVICE}`); }
+  try { runSystemctl(`restart ${XRAY_SERVICE}`, { dedupKey: `restart:${XRAY_SERVICE}`, dedupMs: 500 }); }
+  catch { runSystemctl(`start ${XRAY_SERVICE}`, { dedupKey: `start:${XRAY_SERVICE}`, dedupMs: 500 }); }
 }
 
 function applyAndRestart() {
@@ -530,13 +568,19 @@ let xrayApplyTimer = null;
 let xrayPendingOps = [];
 
 function flushXrayApplyQueue() {
+  if (xrayApplyLock) return;
   const ops = xrayPendingOps;
   xrayPendingOps = [];
   xrayApplyTimer = null;
   if (!ops.length) return;
 
-  writeRenderedXrayConfigOnly();
+  xrayApplyLock = true;
   try {
+    const changed = writeRenderedXrayConfigOnly().changed;
+    if (!changed && !ops.some(x => x.type === 'restart')) {
+      return;
+    }
+
     for (const op of ops) {
       if (op.type === 'add') xrayApiAddInbound(op.ib);
       else if (op.type === 'remove') xrayApiRemoveInboundByTag(op.tag);
@@ -549,6 +593,11 @@ function flushXrayApplyQueue() {
     }
   } catch {
     restartXrayService();
+  } finally {
+    xrayApplyLock = false;
+    if (xrayPendingOps.length && !xrayApplyTimer) {
+      xrayApplyTimer = setTimeout(flushXrayApplyQueue, XRAY_APPLY_DEBOUNCE_MS);
+    }
   }
 }
 
@@ -615,7 +664,7 @@ function applyDnsProfile() {
     'DNSSEC=no'
   ].join('\n') + '\n';
   fs.writeFileSync(path.join(dir, '99-sui-dns.conf'), conf);
-  try { shell('systemctl restart systemd-resolved'); } catch {}
+  try { runSystemctl('restart systemd-resolved', { dedupKey: 'restart:systemd-resolved', dedupMs: 1000, ignoreError: true }); } catch {}
   return { ok: true };
 }
 
@@ -942,7 +991,7 @@ app.delete('/api/forwards/:id', async (req, res) => {
 });
 
 app.post('/api/system/restart-panel', async (_req, res) => {
-  try { shell(`systemctl restart ${PANEL_SERVICE}`); res.json({ success: true, msg: 'panel restarted' }); }
+  try { runSystemctl(`restart ${PANEL_SERVICE}`, { dedupKey: `restart:${PANEL_SERVICE}`, dedupMs: 500 }); res.json({ success: true, msg: 'panel restarted' }); }
   catch (e) { res.status(500).json({ success: false, msg: e.message }); }
 });
 
@@ -960,13 +1009,13 @@ app.post('/api/system/chain/test', async (req, res) => {
 });
 
 app.post('/api/system/restart-xray', async (_req, res) => {
-  try { shell(`systemctl restart ${XRAY_SERVICE}`); res.json({ success: true, msg: 'xray restarted' }); }
+  try { runSystemctl(`restart ${XRAY_SERVICE}`, { dedupKey: `restart:${XRAY_SERVICE}`, dedupMs: 500 }); res.json({ success: true, msg: 'xray restarted' }); }
   catch (e) { res.status(500).json({ success: false, msg: e.message }); }
 });
 
 // backward compatibility
 app.post('/api/system/restart-xui', async (_req, res) => {
-  try { shell(`systemctl restart ${XRAY_SERVICE}`); res.json({ success: true, msg: 'xray restarted' }); }
+  try { runSystemctl(`restart ${XRAY_SERVICE}`, { dedupKey: `restart:${XRAY_SERVICE}`, dedupMs: 500 }); res.json({ success: true, msg: 'xray restarted' }); }
   catch (e) { res.status(500).json({ success: false, msg: e.message }); }
 });
 
@@ -1161,9 +1210,8 @@ app.post('/api/system/xray/switch', async (req, res) => {
     ].join(' && ');
     shell(cmd);
     ensureCoreService();
-  loadForwardState();
-    shell('systemctl daemon-reload');
-    shell(`systemctl restart ${XRAY_SERVICE}`);
+    runSystemctl('daemon-reload', { dedupKey: 'daemon-reload', dedupMs: 300, ignoreError: true });
+    runSystemctl(`restart ${XRAY_SERVICE}`, { dedupKey: `restart:${XRAY_SERVICE}`, dedupMs: 500 });
     const now = shell('/usr/local/bin/xray version 2>/dev/null | head -n 1');
     res.json({ success: true, msg: `switched to ${version}`, current: now });
   } catch (e) { res.status(500).json({ success: false, msg: e.message }); }
