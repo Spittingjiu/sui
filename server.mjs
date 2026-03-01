@@ -32,6 +32,8 @@ let panelSettings = {
   password: process.env.PANEL_PASS || 'admin123',
   panelPath: normalizePanelPath(process.env.PANEL_PATH || '/'),
   panelToken: ENV_PANEL_TOKEN || crypto.randomBytes(18).toString('hex'),
+  e2eePrivateKeyPem: '',
+  e2eePublicKeyB64: '',
   forceResetPassword: true
 };
 
@@ -78,6 +80,37 @@ function savePanelSettings(force = false) {
     writeJsonAtomic(PANEL_SETTINGS_FILE, panelSettings);
   }, WRITE_DEBOUNCE_MS);
 }
+
+function ensurePanelE2EEKeys(){
+  if (panelSettings.e2eePrivateKeyPem && panelSettings.e2eePublicKeyB64) return;
+  const kp = crypto.generateKeyPairSync('x25519');
+  panelSettings.e2eePrivateKeyPem = kp.privateKey.export({type:'pkcs8',format:'pem'}).toString();
+  panelSettings.e2eePublicKeyB64 = kp.publicKey.export({type:'spki',format:'der'}).toString('base64url');
+}
+
+function encryptForSub(subPubB64, payloadObj){
+  const subPub = crypto.createPublicKey({ key: Buffer.from(String(subPubB64||''), 'base64url'), format: 'der', type: 'spki' });
+  const pri = crypto.createPrivateKey(panelSettings.e2eePrivateKeyPem);
+  const secret = crypto.diffieHellman({ privateKey: pri, publicKey: subPub });
+  const key = crypto.createHash('sha256').update(secret).digest();
+  const iv = crypto.randomBytes(12);
+  const nonce = crypto.randomBytes(16).toString('hex');
+  const ts = Date.now();
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const ct = Buffer.concat([cipher.update(JSON.stringify(payloadObj), 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return {
+    e2ee: 1,
+    alg: 'x25519+aes-256-gcm',
+    senderPub: panelSettings.e2eePublicKeyB64,
+    ts,
+    nonce,
+    iv: iv.toString('base64url'),
+    tag: tag.toString('base64url'),
+    ciphertext: ct.toString('base64url')
+  };
+}
+
 function loadPanelSettings() {
   if (fs.existsSync(PANEL_SETTINGS_FILE)) {
     const o = parseJ(fs.readFileSync(PANEL_SETTINGS_FILE, 'utf8'), {});
@@ -85,12 +118,16 @@ function loadPanelSettings() {
     panelSettings.password = String(o.password || panelSettings.password || 'admin123');
     panelSettings.panelPath = normalizePanelPath(o.panelPath || panelSettings.panelPath || '/');
     panelSettings.panelToken = String(o.panelToken || panelSettings.panelToken || ENV_PANEL_TOKEN || crypto.randomBytes(18).toString('hex'));
+    panelSettings.e2eePrivateKeyPem = String(o.e2eePrivateKeyPem || panelSettings.e2eePrivateKeyPem || '');
+    panelSettings.e2eePublicKeyB64 = String(o.e2eePublicKeyB64 || panelSettings.e2eePublicKeyB64 || '');
+    ensurePanelE2EEKeys();
     panelSettings.forceResetPassword = o.forceResetPassword !== undefined ? !!o.forceResetPassword : false;
   } else {
     // 仅全新安装（无历史节点）时强制首次改密；老环境升级不拦截节点列表
     const hasHistory = fs.existsSync(DATA_FILE) || fs.existsSync('/etc/x-ui/x-ui.db');
     panelSettings.forceResetPassword = hasHistory ? false : true;
     panelSettings.panelToken = String(panelSettings.panelToken || ENV_PANEL_TOKEN || crypto.randomBytes(18).toString('hex'));
+    ensurePanelE2EEKeys();
     savePanelSettings();
   }
 }
@@ -770,16 +807,21 @@ app.post('/api/panel/connect-sub', async (req, res) => {
     if (!subUrl || !subUsername || !subPassword) return res.status(400).json({ success: false, msg: 'subUrl / subUsername / subPassword 必填' });
 
     const panelBase = `${req.protocol}://${req.get('host')}`;
+    const mr = await fetch(`${subUrl}/api/bridge/e2ee-meta`);
+    if (!mr.ok) return res.status(500).json({ success: false, msg: `获取 sub 公钥失败 HTTP ${mr.status}` });
+    const mj = await mr.json();
+    if (!mj?.ok || !mj?.publicKey) return res.status(500).json({ success: false, msg: 'sub 公钥无效' });
+    const envelope = encryptForSub(mj.publicKey, {
+      username: subUsername,
+      password: subPassword,
+      name: sourceName,
+      panel_url: panelBase,
+      panel_token: panelSettings.panelToken
+    });
     const r = await fetch(`${subUrl}/api/bridge/push-source`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        username: subUsername,
-        password: subPassword,
-        name: sourceName,
-        panel_url: panelBase,
-        panel_token: panelSettings.panelToken
-      })
+      body: JSON.stringify(envelope)
     });
     const txt = await r.text();
     let j = null;
