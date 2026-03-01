@@ -39,9 +39,14 @@ let panelSettings = {
 
 
 const WRITE_DEBOUNCE_MS = Number(process.env.SUI_WRITE_DEBOUNCE_MS || 400);
+const VIEW_CACHE_MS = Number(process.env.SUI_VIEW_CACHE_MS || 2000);
 let stateFlushTimer = null;
 let forwardFlushTimer = null;
 let panelSettingsFlushTimer = null;
+let viewCache = new Map();
+function cacheGet(key){ const v=viewCache.get(key); if(!v) return null; if(v.exp<Date.now()){viewCache.delete(key);return null;} return v.data; }
+function cacheSet(key,data,ttl=VIEW_CACHE_MS){ viewCache.set(key,{data,exp:Date.now()+ttl}); }
+function cacheInvalidate(){ viewCache.clear(); }
 
 function writeTextAtomic(file, content) {
   const dir = path.dirname(file);
@@ -72,12 +77,14 @@ function savePanelSettings(force = false) {
   if (force) {
     if (panelSettingsFlushTimer) { clearTimeout(panelSettingsFlushTimer); panelSettingsFlushTimer = null; }
     writeJsonAtomic(PANEL_SETTINGS_FILE, panelSettings);
+    cacheInvalidate();
     return;
   }
   if (panelSettingsFlushTimer) clearTimeout(panelSettingsFlushTimer);
   panelSettingsFlushTimer = setTimeout(() => {
     panelSettingsFlushTimer = null;
     writeJsonAtomic(PANEL_SETTINGS_FILE, panelSettings);
+    cacheInvalidate();
   }, WRITE_DEBOUNCE_MS);
 }
 
@@ -351,12 +358,14 @@ function writeState(force = false) {
   if (force) {
     if (stateFlushTimer) { clearTimeout(stateFlushTimer); stateFlushTimer = null; }
     writeJsonAtomic(DATA_FILE, state);
+    cacheInvalidate();
     return;
   }
   if (stateFlushTimer) clearTimeout(stateFlushTimer);
   stateFlushTimer = setTimeout(() => {
     stateFlushTimer = null;
     writeJsonAtomic(DATA_FILE, state);
+    cacheInvalidate();
   }, WRITE_DEBOUNCE_MS);
 }
 
@@ -1113,6 +1122,8 @@ app.post('/api/system/optimize/all', async (_req, res) => {
 
 app.get('/api/view/bootstrap', async (_req, res) => {
   try {
+    const hit = cacheGet('view-bootstrap');
+    if (hit) return res.json({ success: true, obj: hit, cached: true });
     const panel = { username: panelSettings.username, panelPath: panelSettings.panelPath || '/', forceResetPassword: !!panelSettings.forceResetPassword };
 
     const svc = (name) => {
@@ -1146,7 +1157,9 @@ app.get('/api/view/bootstrap', async (_req, res) => {
       currentXray = { binary: (m ? m[1] : out), panel: 'self-hosted' };
     } catch {}
 
-    res.json({ success: true, obj: { panel, status, xrayVersion: currentXray } });
+    const obj = { panel, status, xrayVersion: currentXray };
+    cacheSet('view-bootstrap', obj);
+    res.json({ success: true, obj, cached: false });
   } catch (e) {
     res.status(500).json({ success: false, msg: e.message });
   }
