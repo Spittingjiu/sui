@@ -715,6 +715,21 @@ function switchTab(t){const main=t==='main',settings=t==='settings',xray=t==='xr
 
 // 面板设置相关（保留原有逻辑）
 async function loadPanelSettings(){const r=await api('/api/panel/settings');if(!r.success)return;setUser.value=r.obj.username||'';setPath.value=r.obj.panelPath||'/';if(r.obj.forceResetPassword){forceReset=true;forceResetTip.style.display='block';}await loadPanelToken();}
+async function loadBootstrap(){
+  const r=await api('/api/view/bootstrap');
+  if(!r.success) return;
+  const panel=r.obj?.panel||{};
+  const st=r.obj?.status||{};
+  const xv=r.obj?.xrayVersion||{};
+  setUser.value=panel.username||setUser.value||'';
+  setPath.value=panel.panelPath||setPath.value||'/';
+  if(panel.forceResetPassword){forceReset=true;forceResetTip.style.display='block';}
+  cv.textContent=`📜 当前 Xray: ${(xv.binary||'-')} / ${(xv.panel||'self-hosted')}`;
+  const ok=v=>v==='active';
+  sp.textContent=`面板:${ok(st.panel?.active)?'正常':'不正常'}`; sp.className='badge '+(ok(st.panel?.active)?'status-ok':'status-bad');
+  sx.textContent=`Xray:${ok(st.xray?.active)?'正常':'不正常'}${st.xrayVersion?(' · '+st.xrayVersion):''}`; sx.className='badge '+(ok(st.xray?.active)?'status-ok':'status-bad');
+  si.textContent=`节点:${(st.inboundsEnabled??'-')}/${(st.inboundsTotal??'-')}`;
+}
 async function savePanelUsername(){const u=(setUser.value||'').trim();if(!u)return notify('用户名不能为空','err');const r=await api('/api/panel/settings',{method:'POST',body:JSON.stringify({username:u})});notify(r.success?'用户名已保存':(r.msg||'保存失败'),r.success?'ok':'err');}
 async function savePanelPath(){const p=(setPath.value||'').trim()||'/';const r=await api('/api/panel/settings',{method:'POST',body:JSON.stringify({panelPath:p})});notify(r.success?'路径已保存（重启后生效）':(r.msg||'保存失败'),r.success?'ok':'err');}
 async function changePanelPassword(){const np=(setNewPass.value||'').trim();if(np.length<6)return notify('新密码至少6位','err');const r=await api('/api/panel/change-password',{method:'POST',body:JSON.stringify({oldPassword:setOldPass.value,newPassword:np})});if(!r.success)return notify(r.msg||'修改失败','err');forceReset=false;forceResetTip.style.display='none';setOldPass.value='';setNewPass.value='';notify('密码已更新');}
@@ -827,7 +842,7 @@ async function switchXrayVersion(){
 
 // 初始化（保留原有逻辑）
 async function init(){let __qTimer=null;q.oninput=()=>{clearTimeout(__qTimer);__qTimer=setTimeout(render,120)};f_protocol.onchange=tune;f_network.onchange=tune;f_security.onchange=tune;fChainEnabled.onchange=tune;fChainType.onchange=tune;fChainEnhance.onchange=tune;fChainUdp443Policy.onchange=tune;switchTab('main');
-  await Promise.all([loadPanelSettings(),loadCur(),loadStatus()]);
+  await Promise.all([loadBootstrap(),loadPanelToken()]);
   if(!forceReset){
     warmRenderFromCache();
     loadData();

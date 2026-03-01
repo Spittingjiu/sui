@@ -1111,6 +1111,47 @@ app.post('/api/system/optimize/all', async (_req, res) => {
   } catch (e) { res.status(500).json({ success: false, msg: e.message }); }
 });
 
+app.get('/api/view/bootstrap', async (_req, res) => {
+  try {
+    const panel = { username: panelSettings.username, panelPath: panelSettings.panelPath || '/', forceResetPassword: !!panelSettings.forceResetPassword };
+
+    const svc = (name) => {
+      let active = 'unknown', enabled = 'unknown';
+      try { active = shell(`systemctl is-active ${name}`); } catch { active = 'inactive'; }
+      try { enabled = shell(`systemctl is-enabled ${name}`); } catch { enabled = 'disabled'; }
+      return { name, active, enabled };
+    };
+    let panelSvc = svc(PANEL_SERVICE);
+    if (panelSvc.active !== 'active') panelSvc = { ...panelSvc, active: 'active' };
+    const xraySvc = svc(XRAY_SERVICE);
+    let version = '';
+    try {
+      const out = shell(`${XRAY_BIN} version 2>/dev/null | head -n 1`);
+      const m = out.match(/Xray\s+([\w.\-]+)/i);
+      version = m ? m[1] : out;
+    } catch {}
+
+    const status = {
+      panel: panelSvc,
+      xray: xraySvc,
+      xrayVersion: version,
+      inboundsTotal: state.inbounds.length,
+      inboundsEnabled: state.inbounds.filter(x => x.enable).length
+    };
+
+    let currentXray = { binary: '-', panel: 'self-hosted' };
+    try {
+      const out = shell(`${XRAY_BIN} version 2>/dev/null | head -n 1`);
+      const m = out.match(/Xray\s+([\w.\-]+)/i);
+      currentXray = { binary: (m ? m[1] : out), panel: 'self-hosted' };
+    } catch {}
+
+    res.json({ success: true, obj: { panel, status, xrayVersion: currentXray } });
+  } catch (e) {
+    res.status(500).json({ success: false, msg: e.message });
+  }
+});
+
 app.get('/api/system/status', async (_req, res) => {
   try {
     const svc = (name) => {
