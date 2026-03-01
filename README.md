@@ -14,6 +14,15 @@ SUI Panel 是一个面向真实运维场景的 Xray 管理面板，目标很直�
 - 项目地址：https://github.com/Spittingjiu/sui-sub
 - 功能：多源自动同步、节点级订阅编辑、多订阅链接管理、SUI 管理页
 
+### 与 sui-sub 的联动说明
+在 SUI 面板的 **「对接Token」** 标签页，已内置一键联动：
+1. 填入 `sui-sub` 地址
+2. 填入 `sui-sub` 用户名
+3. （可选）填写写入到 sub 的源名称
+4. 点击 **「一键写入」**
+
+系统会自动把当前 SUI 面板地址 + API Token 写入 `sui-sub`，无需手动复制粘贴。
+
 ## ✨ 功能
 
 - Web 面板登录与会话管理
