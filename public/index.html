@@ -714,7 +714,6 @@ function logout(){localStorage.removeItem('sessionToken');location.reload();}
 function switchTab(t){const main=t==='main',settings=t==='settings',xray=t==='xray',token=t==='token';tabMain.style.display=main?'':'none';tabSettings.style.display=settings?'':'none';tabXray.style.display=xray?'':'none';tabToken.style.display=token?'':'none';$('tabMainBtn').className=main?'on':'';$('tabSettingsBtn').className=settings?'on':'';$('tabXrayBtn').className=xray?'on':'';$('tabTokenBtn').className=token?'on':'';}
 
 // 面板设置相关（保留原有逻辑）
-async function loadPanelSettings(){const r=await api('/api/panel/settings');if(!r.success)return;setUser.value=r.obj.username||'';setPath.value=r.obj.panelPath||'/';if(r.obj.forceResetPassword){forceReset=true;forceResetTip.style.display='block';}await loadPanelToken();}
 async function loadBootstrap(){
   const r=await api('/api/view/bootstrap');
   if(!r.success) return;
