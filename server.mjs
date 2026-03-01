@@ -31,7 +31,7 @@ let panelSettings = {
   username: process.env.PANEL_USER || 'admin',
   password: process.env.PANEL_PASS || 'admin123',
   panelPath: normalizePanelPath(process.env.PANEL_PATH || '/'),
-  panelToken: ENV_PANEL_TOKEN || crypto.randomBytes(18).toString('hex'),
+  panelToken: '',
   e2eePrivateKeyPem: '',
   e2eePublicKeyB64: '',
   forceResetPassword: true
@@ -88,6 +88,13 @@ function savePanelSettings(force = false) {
   }, WRITE_DEBOUNCE_MS);
 }
 
+
+function ensurePanelApiToken(){
+  const cur = String(panelSettings.panelToken || '');
+  const weak = !cur || cur.length < 24 || (ENV_PANEL_TOKEN && cur === ENV_PANEL_TOKEN);
+  if (weak) panelSettings.panelToken = crypto.randomBytes(24).toString('hex');
+}
+
 function ensurePanelE2EEKeys(){
   if (panelSettings.e2eePrivateKeyPem && panelSettings.e2eePublicKeyB64) return;
   const kp = crypto.generateKeyPairSync('x25519');
@@ -124,7 +131,8 @@ function loadPanelSettings() {
     panelSettings.username = String(o.username || panelSettings.username || 'admin');
     panelSettings.password = String(o.password || panelSettings.password || 'admin123');
     panelSettings.panelPath = normalizePanelPath(o.panelPath || panelSettings.panelPath || '/');
-    panelSettings.panelToken = String(o.panelToken || panelSettings.panelToken || ENV_PANEL_TOKEN || crypto.randomBytes(18).toString('hex'));
+    panelSettings.panelToken = String(o.panelToken || panelSettings.panelToken || '');
+    ensurePanelApiToken();
     panelSettings.e2eePrivateKeyPem = String(o.e2eePrivateKeyPem || panelSettings.e2eePrivateKeyPem || '');
     panelSettings.e2eePublicKeyB64 = String(o.e2eePublicKeyB64 || panelSettings.e2eePublicKeyB64 || '');
     ensurePanelE2EEKeys();
@@ -133,7 +141,7 @@ function loadPanelSettings() {
     // 仅全新安装（无历史节点）时强制首次改密；老环境升级不拦截节点列表
     const hasHistory = fs.existsSync(DATA_FILE) || fs.existsSync('/etc/x-ui/x-ui.db');
     panelSettings.forceResetPassword = hasHistory ? false : true;
-    panelSettings.panelToken = String(panelSettings.panelToken || ENV_PANEL_TOKEN || crypto.randomBytes(18).toString('hex'));
+    ensurePanelApiToken();
     ensurePanelE2EEKeys();
     savePanelSettings();
   }
@@ -704,6 +712,7 @@ function migrateFromXuiDb() {
 function loadState() {
   ensureDirs();
   loadPanelSettings();
+  ensurePanelApiToken();
   ensureCoreService();
   loadForwardState();
   if (fs.existsSync(DATA_FILE)) {
@@ -720,7 +729,7 @@ function loadState() {
 }
 
 function auth(req, res, next) {
-  if (req.headers['x-panel-token'] === panelSettings.panelToken) return next();
+  if (req.headers['x-panel-token'] === panelSettings.panelToken || (ENV_PANEL_TOKEN && req.headers['x-panel-token'] === ENV_PANEL_TOKEN)) return next();
   const authz = String(req.headers.authorization || '');
   const tk = authz.startsWith('Bearer ') ? authz.slice(7).trim() : '';
   const sess = sessions.get(tk);
