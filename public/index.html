@@ -491,6 +491,7 @@
     <button id="tabMainBtn" class="on" onclick="switchTab('main')"><i class="fa fa-th"></i> 节点管理</button>
     <button id="tabSettingsBtn" onclick="switchTab('settings')"><i class="fa fa-cog"></i> 面板设置</button>
     <button id="tabXrayBtn" onclick="switchTab('xray')"><i class="fa fa-file-text-o"></i> Xray管理</button>
+    <button id="tabTokenBtn" onclick="switchTab('token')"><i class="fa fa-plug"></i> 对接Token</button>
     <span class="grow"></span>
     <button class="danger" onclick="logout()"><i class="fa fa-sign-out"></i> 退 出</button>
   </div>
@@ -537,12 +538,6 @@
           <input id="set_new_pass" type="password" placeholder="新密码（至少6位）" style="width:100%;margin-top:8px" />
           <button style="margin-top:8px;width:100%" onclick="changePanelPassword()"><i class="fa fa-refresh"></i> 更新密码</button>
         </div>
-        <div>
-          <div class="muted"><i class="fa fa-plug"></i> API Token（给 sui-sub 对接）</div>
-          <input id="set_panel_token" readonly style="width:100%" />
-          <button style="margin-top:8px;width:100%" onclick="copyPanelToken()"><i class="fa fa-copy"></i> 复制 Token</button>
-          <button style="margin-top:8px;width:100%" onclick="rotatePanelToken()"><i class="fa fa-random"></i> 重新生成 Token</button>
-        </div>
       </div>
     </div>
 
@@ -571,6 +566,18 @@
       </div>
       <textarea id="xrayConfigText" style="width:100%;min-height:420px;font-family:monospace" placeholder="点击“读取配置”加载当前 Xray 配置"></textarea>
       <div class="muted" style="margin-top:8px">说明：保存时会先做 JSON 校验与 Xray 配置测试，通过后才会落盘。</div>
+    </div>
+  </div>
+
+  <div id="tab-token" style="display:none">
+    <div class="card">
+      <h2><i class="fa fa-plug"></i> API Token（给 sui-sub 对接）</h2>
+      <div class="row" style="margin-top:8px">
+        <input id="set_panel_token" readonly style="max-width:520px" />
+        <button onclick="copyPanelToken()"><i class="fa fa-copy"></i> 复制 Token</button>
+        <button onclick="rotatePanelToken()"><i class="fa fa-random"></i> 重新生成 Token</button>
+      </div>
+      <div class="muted" style="margin-top:8px">提示：重新生成后旧 Token 立即失效，需同步更新到 sui-sub。</div>
     </div>
   </div>
 </div>
@@ -667,7 +674,7 @@ const fForwardProtocol=$('f_forward_protocol'), fForwardTargetHost=$('f_forward_
 const fChainEnabled=$('f_chain_enabled'), fChainType=$('f_chain_type'), fChainDomain=$('f_chain_domain'), fChainEnhance=$('f_chain_enhance'), fChainUdp443Policy=$('f_chain_udp443_policy'), fChainHost=$('f_chain_host'), fChainPort=$('f_chain_port'), fChainUser=$('f_chain_user'), fChainPass=$('f_chain_pass');
 const fChainUUID=$('f_chain_uuid'), fChainServerName=$('f_chain_server_name'), fChainPublicKey=$('f_chain_public_key'), fChainShortId=$('f_chain_short_id'), fChainFlow=$('f_chain_flow');
 const fChainSSMethod=$('f_chain_ss_method'), fChainSSPassword=$('f_chain_ss_password');
-const tabMain=$('tab-main'), tabSettings=$('tab-settings'), tabXray=$('tab-xray'), forceResetTip=$('forceResetTip');
+const tabMain=$('tab-main'), tabSettings=$('tab-settings'), tabXray=$('tab-xray'), tabToken=$('tab-token'), forceResetTip=$('forceResetTip');
 const setUser=$('set_user'), setPath=$('set_path'), setOldPass=$('set_old_pass'), setNewPass=$('set_new_pass'), setPanelToken=$('set_panel_token');
 const xvNow=$('xvNow'), xvSel=$('xvSel'), xvHint=$('xvHint');
 const xrayConfigText=$('xrayConfigText');
@@ -692,7 +699,7 @@ async function doLogin(){
 function logout(){localStorage.removeItem('sessionToken');location.reload();}
 
 // 切换标签页
-function switchTab(t){const main=t==='main',settings=t==='settings',xray=t==='xray';tabMain.style.display=main?'':'none';tabSettings.style.display=settings?'':'none';tabXray.style.display=xray?'':'none';$('tabMainBtn').className=main?'on':'';$('tabSettingsBtn').className=settings?'on':'';$('tabXrayBtn').className=xray?'on':'';}
+function switchTab(t){const main=t==='main',settings=t==='settings',xray=t==='xray',token=t==='token';tabMain.style.display=main?'':'none';tabSettings.style.display=settings?'':'none';tabXray.style.display=xray?'':'none';tabToken.style.display=token?'':'none';$('tabMainBtn').className=main?'on':'';$('tabSettingsBtn').className=settings?'on':'';$('tabXrayBtn').className=xray?'on':'';$('tabTokenBtn').className=token?'on':'';}
 
 // 面板设置相关（保留原有逻辑）
 async function loadPanelSettings(){const r=await api('/api/panel/settings');if(!r.success)return;setUser.value=r.obj.username||'';setPath.value=r.obj.panelPath||'/';if(r.obj.forceResetPassword){forceReset=true;forceResetTip.style.display='block';}await loadPanelToken();}
