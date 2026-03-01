@@ -8,7 +8,7 @@ import QRCode from 'qrcode';
 
 const app = express();
 const PORT = Number(process.env.PORT || 8810);
-const PANEL_TOKEN = process.env.PANEL_TOKEN || crypto.randomBytes(18).toString('hex');
+const ENV_PANEL_TOKEN = process.env.PANEL_TOKEN || '';
 const XRAY_PUBLIC_HOST = process.env.XRAY_PUBLIC_HOST || '';
 const PANEL_SERVICE = process.env.PANEL_SERVICE || 'sui-panel.service';
 const PANEL_TLS_ENABLE = ['1', 'true', 'yes', 'on'].includes(String(process.env.PANEL_TLS_ENABLE || '').toLowerCase());
@@ -31,8 +31,10 @@ let panelSettings = {
   username: process.env.PANEL_USER || 'admin',
   password: process.env.PANEL_PASS || 'admin123',
   panelPath: normalizePanelPath(process.env.PANEL_PATH || '/'),
+  panelToken: ENV_PANEL_TOKEN || crypto.randomBytes(18).toString('hex'),
   forceResetPassword: true
 };
+
 
 const WRITE_DEBOUNCE_MS = Number(process.env.SUI_WRITE_DEBOUNCE_MS || 400);
 let stateFlushTimer = null;
@@ -82,14 +84,17 @@ function loadPanelSettings() {
     panelSettings.username = String(o.username || panelSettings.username || 'admin');
     panelSettings.password = String(o.password || panelSettings.password || 'admin123');
     panelSettings.panelPath = normalizePanelPath(o.panelPath || panelSettings.panelPath || '/');
+    panelSettings.panelToken = String(o.panelToken || panelSettings.panelToken || ENV_PANEL_TOKEN || crypto.randomBytes(18).toString('hex'));
     panelSettings.forceResetPassword = o.forceResetPassword !== undefined ? !!o.forceResetPassword : false;
   } else {
     // 仅全新安装（无历史节点）时强制首次改密；老环境升级不拦截节点列表
     const hasHistory = fs.existsSync(DATA_FILE) || fs.existsSync('/etc/x-ui/x-ui.db');
     panelSettings.forceResetPassword = hasHistory ? false : true;
+    panelSettings.panelToken = String(panelSettings.panelToken || ENV_PANEL_TOKEN || crypto.randomBytes(18).toString('hex'));
     savePanelSettings();
   }
 }
+
 
 function ensureDirs() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -267,11 +272,7 @@ function normalizeInbound(x = {}) {
     tag: String(x.tag || `inbound-${Date.now()}-${Math.random().toString(16).slice(2,8)}`),
     sniffing: typeof x.sniffing === 'string' ? x.sniffing : j(x.sniffing || { enabled: true, destOverride: ['http', 'tls', 'quic'], metadataOnly: false, routeOnly: false }),
     allocate: typeof x.allocate === 'string' ? x.allocate : j(x.allocate || { strategy: 'always', refresh: 5, concurrency: 3 }),
-    chain: (typeof x.chain === 'string' ? parseJ(x.chain, {}) : (x.chain || {})),
-    trafficRawUp: Number(x.trafficRawUp || 0),
-    trafficRawDown: Number(x.trafficRawDown || 0),
-    trafficOffsetUp: Number(x.trafficOffsetUp || 0),
-    trafficOffsetDown: Number(x.trafficOffsetDown || 0)
+    chain: (typeof x.chain === 'string' ? parseJ(x.chain, {}) : (x.chain || {}))
   };
 }
 
@@ -292,36 +293,18 @@ function buildInbound(form = {}) {
   if (protocol === 'vmess') settings = { clients: [{ id: uuid, alterId: 0, email }], disableInsecureEncryption: false };
   if (protocol === 'trojan') settings = { clients: [{ password, email }], fallbacks: [] };
   if (protocol === 'shadowsocks') settings = { clients: [{ method, password, email }], network: 'tcp,udp' };
-  if (protocol === 'socks') {
-    const user = String(form.user || '').trim();
-    settings = user
-      ? { auth: 'password', accounts: [{ user, pass: password }], udp: true }
-      : { auth: 'noauth', udp: true };
-  }
-  if (protocol === 'http') {
-    const user = String(form.user || '').trim();
-    settings = user
-      ? { accounts: [{ user, pass: password }], allowTransparent: false }
-      : { allowTransparent: false };
-  }
 
-  const stream = {};
-  if (!['socks', 'http'].includes(protocol)) {
-    stream.network = network;
-    stream.security = security;
-    if (network === 'ws') stream.wsSettings = { path: form.path || '/', headers: { Host: form.host || '' } };
-    if (network === 'tcp') stream.tcpSettings = { acceptProxyProtocol: false, header: { type: 'none' } };
-    if (security === 'tls') stream.tlsSettings = { serverName: form.sni || '', certificates: [] };
-    if (security === 'reality') stream.realitySettings = { show: false, dest: form.realityDest || 'www.cloudflare.com:443', xver: 0, serverNames: [form.sni || 'www.cloudflare.com'], privateKey: form.privateKey || '', shortIds: [form.shortId || ''] };
-  }
+  const stream = { network, security };
+  if (network === 'ws') stream.wsSettings = { path: form.path || '/', headers: { Host: form.host || '' } };
+  if (network === 'tcp') stream.tcpSettings = { acceptProxyProtocol: false, header: { type: 'none' } };
+  if (security === 'tls') stream.tlsSettings = { serverName: form.sni || '', certificates: [] };
+  if (security === 'reality') stream.realitySettings = { show: false, dest: form.realityDest || 'www.cloudflare.com:443', xver: 0, serverNames: [form.sni || 'www.cloudflare.com'], privateKey: form.privateKey || '', shortIds: [form.shortId || ''] };
 
   return normalizeInbound({
     up: 0, down: 0, total: Number(form.total || 0), remark,
     enable: true, expiryTime: Number(form.expiryTime || 0), listen: '', port, protocol,
     settings: j(settings), streamSettings: j(stream), tag: `inbound-${Date.now()}`,
-    sniffing: j(['socks', 'http'].includes(protocol)
-      ? { enabled: false }
-      : { enabled: true, destOverride: ['http', 'tls', 'quic'], metadataOnly: false, routeOnly: false }),
+    sniffing: j({ enabled: true, destOverride: ['http', 'tls', 'quic'], metadataOnly: false, routeOnly: false }),
     allocate: j({ strategy: 'always', refresh: 5, concurrency: 3 }),
     chain: form.chain || {}
   });
@@ -403,50 +386,21 @@ function xrayApiRemoveInboundByTag(tag) {
 }
 
 function parseDomainFilter(raw = '') {
-  const out = [];
-  const seen = new Set();
-
-  const push = (v) => {
-    if (!v || seen.has(v)) return;
-    seen.add(v);
-    out.push(v);
-  };
-
-  for (const part of String(raw || '').split(/[\n,，;；\s]+/)) {
-    let d = String(part || '').trim().toLowerCase();
-    if (!d) continue;
-
-    // 支持用户直接粘贴 URL / host:port / 带路径
-    // 例如: https://chat.openai.com/a/b -> chat.openai.com
-    d = d.replace(/^https?:\/\//, '');
-    d = d.replace(/^wss?:\/\//, '');
-    d = d.replace(/[/?#].*$/, '');
-    d = d.replace(/:\d+$/, '');
-
-    // 支持已有前缀写法
-    if (d.startsWith('domain:') || d.startsWith('full:')) {
-      const pref = d.startsWith('domain:') ? 'domain:' : 'full:';
-      const host = d.slice(pref.length).replace(/^\*?\.?/, '').replace(/^\.+/, '').replace(/\.+$/, '');
-      if (host && /^[a-z0-9.-]+$/.test(host) && host.includes('.')) push(pref + host);
-      continue;
-    }
-
-    // 支持 *.example.com / .example.com
-    const wildcard = d.startsWith('*.') || d.startsWith('.');
-    d = d.replace(/^\*?\.?/, '').replace(/^\.+/, '').replace(/\.+$/, '');
-
-    // 过滤明显非法输入
-    if (!d || !/^[a-z0-9.-]+$/.test(d) || !d.includes('.')) continue;
-
-    // 规则：
-    // - *.example.com / .example.com / example.com -> domain:example.com
-    // - a.b.c.com -> full:a.b.c.com（更精准）
-    const labels = d.split('.').filter(Boolean);
-    if (wildcard || labels.length <= 2) push(`domain:${d}`);
-    else push(`full:${d}`);
-  }
-
-  return out;
+  return String(raw || '')
+    .split(/[\n,]+/)
+    .map(s => s.trim().toLowerCase())
+    .filter(Boolean)
+    .map((d) => {
+      // 规则：
+      // 1) .example.com -> 子域泛匹配（domain:example.com）
+      // 2) example.com  -> 根域+子域（domain:example.com）
+      // 3) a.b.com      -> 精确匹配（full:a.b.com）
+      const clean = d.replace(/^\.+/, '');
+      const labels = clean.split('.').filter(Boolean);
+      if (d.startsWith('.')) return `domain:${clean}`;
+      if (labels.length <= 2) return `domain:${clean}`;
+      return `full:${clean}`;
+    });
 }
 
 function buildChainOutbound(ib) {
@@ -720,7 +674,7 @@ function loadState() {
 }
 
 function auth(req, res, next) {
-  if (req.headers['x-panel-token'] === PANEL_TOKEN) return next();
+  if (req.headers['x-panel-token'] === panelSettings.panelToken) return next();
   const authz = String(req.headers.authorization || '');
   const tk = authz.startsWith('Bearer ') ? authz.slice(7).trim() : '';
   const sess = sessions.get(tk);
@@ -763,7 +717,7 @@ app.get('/auth/me', (req, res) => {
 app.use('/api', auth);
 
 app.get('/api/panel/settings', (req, res) => {
-  res.json({ success: true, obj: { username: panelSettings.username, panelPath: panelSettings.panelPath || '/', forceResetPassword: !!panelSettings.forceResetPassword } });
+  res.json({ success: true, obj: { username: panelSettings.username, panelPath: panelSettings.panelPath || '/', forceResetPassword: !!panelSettings.forceResetPassword, panelTokenMasked: (panelSettings.panelToken||'').slice(0,6)+'...'+(panelSettings.panelToken||'').slice(-6) } });
 });
 
 app.post('/api/panel/settings', (req, res) => {
@@ -796,6 +750,17 @@ app.post('/api/panel/change-password', (req, res) => {
   } catch (e) { res.status(500).json({ success: false, msg: e.message }); }
 });
 
+
+app.get('/api/panel/token', (_req, res) => {
+  res.json({ success: true, obj: { token: panelSettings.panelToken || '' } });
+});
+
+app.post('/api/panel/token/rotate', (_req, res) => {
+  panelSettings.panelToken = crypto.randomBytes(24).toString('hex');
+  savePanelSettings(true);
+  res.json({ success: true, obj: { token: panelSettings.panelToken }, msg: 'API Token 已更新' });
+});
+
 const TRAFFIC_REFRESH_INTERVAL_MS = Number(process.env.SUI_TRAFFIC_REFRESH_MS || 8000);
 let lastTrafficRefreshAt = 0;
 let trafficRefreshRunning = false;
@@ -816,39 +781,12 @@ function refreshInboundTraffic() {
       if (!map.has(tag)) map.set(tag, { up: 0, down: 0 });
       map.get(tag)[dir === 'uplink' ? 'up' : 'down'] = Number(item?.value || 0);
     }
-
-    let changed = false;
     for (const ib of state.inbounds) {
       const t = map.get(ib.tag || '');
       if (!t) continue;
-
-      const rawUp = Number(t.up || 0);
-      const rawDown = Number(t.down || 0);
-
-      const prevRawUp = Number(ib.trafficRawUp || 0);
-      const prevRawDown = Number(ib.trafficRawDown || 0);
-      let offUp = Number(ib.trafficOffsetUp || 0);
-      let offDown = Number(ib.trafficOffsetDown || 0);
-
-      // Xray 重启/计数清零时，累计前一段流量，避免面板“归零”
-      if (rawUp < prevRawUp) offUp += prevRawUp;
-      if (rawDown < prevRawDown) offDown += prevRawDown;
-
-      const totalUp = offUp + rawUp;
-      const totalDown = offDown + rawDown;
-
-      if (ib.up !== totalUp || ib.down !== totalDown || ib.trafficRawUp !== rawUp || ib.trafficRawDown !== rawDown || ib.trafficOffsetUp !== offUp || ib.trafficOffsetDown !== offDown) {
-        ib.up = totalUp;
-        ib.down = totalDown;
-        ib.trafficRawUp = rawUp;
-        ib.trafficRawDown = rawDown;
-        ib.trafficOffsetUp = offUp;
-        ib.trafficOffsetDown = offDown;
-        changed = true;
-      }
+      ib.up = Number(t.up || 0);
+      ib.down = Number(t.down || 0);
     }
-
-    if (changed) writeState();
   } catch {}
 }
 
@@ -1066,22 +1004,6 @@ app.post('/api/system/chain/test', async (req, res) => {
   }
 });
 
-app.post('/api/system/traffic/reset', async (_req, res) => {
-  try {
-    refreshInboundTraffic();
-    for (const ib of state.inbounds) {
-      const rawUp = Number(ib.trafficRawUp || 0);
-      const rawDown = Number(ib.trafficRawDown || 0);
-      ib.trafficOffsetUp = -rawUp;
-      ib.trafficOffsetDown = -rawDown;
-      ib.up = 0;
-      ib.down = 0;
-    }
-    writeState(true);
-    res.json({ success: true, msg: 'traffic stats reset' });
-  } catch (e) { res.status(500).json({ success: false, msg: e.message }); }
-});
-
 app.post('/api/system/restart-xray', async (_req, res) => {
   try { runSystemctl(`restart ${XRAY_SERVICE}`, { dedupKey: `restart:${XRAY_SERVICE}`, dedupMs: 500 }); res.json({ success: true, msg: 'xray restarted' }); }
   catch (e) { res.status(500).json({ success: false, msg: e.message }); }
@@ -1205,17 +1127,6 @@ function buildLinksForInbound(ib, reqHeaders = {}) {
       links.push(`ss://${b64u(`${method}:${pwd}`)}@${host}:${ib.port}#${encodeURIComponent(ib.remark || email)}`);
     }
   }
-
-  if ((protocol === 'socks' || protocol === 'http') && links.length === 0) {
-    const accounts = settings.accounts || [];
-    const a = accounts[0] || {};
-    const user = String(a.user || '');
-    const pass = String(a.pass || '');
-    const auth = user ? `${encodeURIComponent(user)}:${encodeURIComponent(pass)}@` : '';
-    const scheme = protocol === 'socks' ? 'socks5' : 'http';
-    links.push(`${scheme}://${auth}${host}:${ib.port}#${encodeURIComponent(ib.remark || protocol)}`);
-  }
-
   return links;
 }
 
@@ -1225,6 +1136,7 @@ app.get('/api/inbounds/:id/links', async (req, res) => {
   if (!ib) return res.status(404).json({ success: false, msg: 'not found' });
   res.json({ success: true, obj: buildLinksForInbound(ib, req.headers || {}) });
 });
+
 
 app.get('/api/system/xray/version-current', async (_req, res) => {
   try {
@@ -1328,12 +1240,12 @@ if (canUseTls) {
   https.createServer(tlsOptions, app).listen(PORT, () => {
     console.log(`sui-panel https on :${PORT}`);
     console.log(`tls_cert=${PANEL_TLS_CERT}`);
-    console.log(`PANEL_TOKEN=${PANEL_TOKEN}`);
+    console.log(`PANEL_TOKEN=${panelSettings.panelToken}`);
   });
 } else {
   app.listen(PORT, () => {
     console.log(`sui-panel on :${PORT}`);
     if (PANEL_TLS_ENABLE) console.log('WARN: PANEL_TLS_ENABLE=1 but cert/key missing, fallback to HTTP');
-    console.log(`PANEL_TOKEN=${PANEL_TOKEN}`);
+    console.log(`PANEL_TOKEN=${panelSettings.panelToken}`);
   });
 }
