@@ -765,8 +765,9 @@ app.post('/api/panel/connect-sub', async (req, res) => {
   try {
     const subUrl = String(req.body?.subUrl || '').trim().replace(/\/$/, '');
     const subUsername = String(req.body?.subUsername || '').trim();
+    const subPassword = String(req.body?.subPassword || '');
     const sourceName = String(req.body?.sourceName || 'sui-panel').trim() || 'sui-panel';
-    if (!subUrl || !subUsername) return res.status(400).json({ success: false, msg: 'subUrl / subUsername 必填' });
+    if (!subUrl || !subUsername || !subPassword) return res.status(400).json({ success: false, msg: 'subUrl / subUsername / subPassword 必填' });
 
     const panelBase = `${req.protocol}://${req.get('host')}`;
     const r = await fetch(`${subUrl}/api/bridge/push-source`, {
@@ -774,6 +775,7 @@ app.post('/api/panel/connect-sub', async (req, res) => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         username: subUsername,
+        password: subPassword,
         name: sourceName,
         panel_url: panelBase,
         panel_token: panelSettings.panelToken
