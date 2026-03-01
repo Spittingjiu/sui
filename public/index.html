@@ -579,6 +579,16 @@
       </div>
       <div class="muted" style="margin-top:8px">提示：重新生成后旧 Token 立即失效，需同步更新到 sui-sub。</div>
     </div>
+    <div class="card">
+      <h2><i class="fa fa-magic"></i> 一键对接到 sui-sub</h2>
+      <div class="row" style="margin-top:8px">
+        <input id="sub_url" placeholder="sui-sub 地址（如 https://sub.zzao.de）" style="min-width:280px" />
+        <input id="sub_user" placeholder="sui-sub 用户名" style="min-width:180px" />
+        <input id="sub_source_name" placeholder="写入到 sub 的源名称（可选）" style="min-width:200px" />
+        <button onclick="connectToSub()"><i class="fa fa-send"></i> 一键写入</button>
+      </div>
+      <div class="muted" style="margin-top:8px">会自动把当前面板地址和 API Token 写入目标 sui-sub。</div>
+    </div>
   </div>
 </div>
 
@@ -676,6 +686,7 @@ const fChainUUID=$('f_chain_uuid'), fChainServerName=$('f_chain_server_name'), f
 const fChainSSMethod=$('f_chain_ss_method'), fChainSSPassword=$('f_chain_ss_password');
 const tabMain=$('tab-main'), tabSettings=$('tab-settings'), tabXray=$('tab-xray'), tabToken=$('tab-token'), forceResetTip=$('forceResetTip');
 const setUser=$('set_user'), setPath=$('set_path'), setOldPass=$('set_old_pass'), setNewPass=$('set_new_pass'), setPanelToken=$('set_panel_token');
+const subUrlInput=$('sub_url'), subUserInput=$('sub_user'), subSourceNameInput=$('sub_source_name');
 const xvNow=$('xvNow'), xvSel=$('xvSel'), xvHint=$('xvHint');
 const xrayConfigText=$('xrayConfigText');
 let API_PREFIX='';
@@ -709,6 +720,7 @@ async function changePanelPassword(){const np=(setNewPass.value||'').trim();if(n
 async function loadPanelToken(){const r=await api('/api/panel/token');if(!r.success)return;setPanelToken.value=r.obj?.token||'';}
 async function copyPanelToken(){if(!setPanelToken.value)return notify('暂无 token','err');await navigator.clipboard.writeText(setPanelToken.value);notify('Token 已复制');}
 async function rotatePanelToken(){if(!confirm('确认重新生成 API Token？旧 Token 将立刻失效。'))return;const r=await api('/api/panel/token/rotate',{method:'POST',body:'{}'});if(!r.success)return notify(r.msg||'生成失败','err');setPanelToken.value=r.obj?.token||'';notify('API Token 已更新');}
+async function connectToSub(){const subUrl=(subUrlInput.value||'').trim();const subUsername=(subUserInput.value||'').trim();const sourceName=(subSourceNameInput.value||'').trim();if(!subUrl||!subUsername)return notify('请填写 sub 地址和用户名','err');const r=await api('/api/panel/connect-sub',{method:'POST',body:JSON.stringify({subUrl,subUsername,sourceName})});if(!r.success)return notify(r.msg||'对接失败','err');notify('已一键写入到 sui-sub');}
 
 // 数据格式化（保留原有逻辑）
 function bytes(n){n=Number(n||0);if(n<1024)return n+'B';if(n<1048576)return(n/1024).toFixed(1)+'KB';if(n<1073741824)return(n/1048576).toFixed(1)+'MB';return(n/1073741824).toFixed(2)+'GB';}

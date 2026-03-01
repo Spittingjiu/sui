@@ -761,6 +761,34 @@ app.post('/api/panel/token/rotate', (_req, res) => {
   res.json({ success: true, obj: { token: panelSettings.panelToken }, msg: 'API Token 已更新' });
 });
 
+app.post('/api/panel/connect-sub', async (req, res) => {
+  try {
+    const subUrl = String(req.body?.subUrl || '').trim().replace(/\/$/, '');
+    const subUsername = String(req.body?.subUsername || '').trim();
+    const sourceName = String(req.body?.sourceName || 'sui-panel').trim() || 'sui-panel';
+    if (!subUrl || !subUsername) return res.status(400).json({ success: false, msg: 'subUrl / subUsername 必填' });
+
+    const panelBase = `${req.protocol}://${req.get('host')}`;
+    const r = await fetch(`${subUrl}/api/bridge/push-source`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        username: subUsername,
+        name: sourceName,
+        panel_url: panelBase,
+        panel_token: panelSettings.panelToken
+      })
+    });
+    const txt = await r.text();
+    let j = null;
+    try { j = txt ? JSON.parse(txt) : null; } catch {}
+    if (!r.ok || !j?.ok) return res.status(500).json({ success: false, msg: j?.error || `对接失败 HTTP ${r.status}` });
+    res.json({ success: true, msg: '已写入到 sui-sub' });
+  } catch (e) {
+    res.status(500).json({ success: false, msg: e.message });
+  }
+});
+
 const TRAFFIC_REFRESH_INTERVAL_MS = Number(process.env.SUI_TRAFFIC_REFRESH_MS || 8000);
 let lastTrafficRefreshAt = 0;
 let trafficRefreshRunning = false;
