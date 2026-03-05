@@ -195,20 +195,27 @@ install_xray_if_needed(){
     local tmp url tag
     tmp=$(mktemp -d)
 
-    # 方案1：从 GitHub API 读取最新 release 的真实下载链接（最稳）
-    url=$(curl -fsSL https://api.github.com/repos/XTLS/Xray-core/releases/latest       | grep 'browser_download_url'       | grep 'Xray-linux-64.zip"'       | head -n1       | sed -E 's/.*"(https:[^"]+)".*/\1/' || true)
+    # 优先使用 GitHub 官方 latest 直链（避免 API 返回非资产内容）
+    url="https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip"
 
-    # 方案2：按 tag 组装 URL（回退）
-    if [[ -z "${url:-}" ]]; then
-      tag=$(curl -fsSL https://api.github.com/repos/XTLS/Xray-core/releases/latest | grep '"tag_name"' | head -n1 | sed -E 's/.*"([^"]+)".*/\1/' || true)
-      [[ -n "$tag" ]] || tag="v26.2.6"
-      url="https://github.com/XTLS/Xray-core/releases/download/${tag}/Xray-linux-64.zip"
+    # 若直链失败，再尝试通过 API 解析真实资产链接
+    if ! curl -fL --retry 5 --retry-delay 2 -A "sui-installer" -o "$tmp/xray.zip" "$url"; then
+      url=$(curl -fsSL -A "sui-installer" https://api.github.com/repos/XTLS/Xray-core/releases/latest         | grep 'browser_download_url'         | grep 'Xray-linux-64.zip"'         | head -n1         | sed -E 's/.*"(https:[^"]+)".*//' || true)
+
+      if [[ -z "${url:-}" ]]; then
+        tag=$(curl -fsSL -A "sui-installer" https://api.github.com/repos/XTLS/Xray-core/releases/latest | grep '"tag_name"' | head -n1 | sed -E 's/.*"([^"]+)".*//' || true)
+        [[ -n "$tag" ]] || tag="v26.2.6"
+        url="https://github.com/XTLS/Xray-core/releases/download/${tag}/Xray-linux-64.zip"
+      fi
+
+      curl -fL --retry 5 --retry-delay 2 -A "sui-installer" -o "$tmp/xray.zip" "$url"
     fi
 
-    # 下载（失败再做最终兜底版本）
-    if ! curl -fL --retry 5 --retry-delay 2 -o "$tmp/xray.zip" "$url"; then
-      warn "Xray 最新版本下载失败，回退固定版本 v26.2.6"
-      curl -fL --retry 5 --retry-delay 2 -o "$tmp/xray.zip" "https://github.com/XTLS/Xray-core/releases/download/v26.2.6/Xray-linux-64.zip"
+    # 校验下载内容必须是可解压 zip；否则走固定版本兜底
+    if ! unzip -t "$tmp/xray.zip" >/dev/null 2>&1; then
+      warn "Xray 下载内容不是有效 zip，回退固定版本 v26.2.6"
+      curl -fL --retry 5 --retry-delay 2 -A "sui-installer" -o "$tmp/xray.zip" "https://github.com/XTLS/Xray-core/releases/download/v26.2.6/Xray-linux-64.zip"
+      unzip -t "$tmp/xray.zip" >/dev/null
     fi
 
     unzip -o "$tmp/xray.zip" -d "$tmp" >/dev/null
