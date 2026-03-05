@@ -64,6 +64,29 @@ apt_base(){
   fi
 }
 
+ensure_node_npm(){
+  if command -v npm >/dev/null 2>&1; then
+    return 0
+  fi
+  log "未检测到 npm，正在自动安装 Node.js/npm..."
+  if command -v apt-get >/dev/null 2>&1; then
+    apt-get update -y >/dev/null
+    apt-get install -y nodejs npm >/dev/null || apt-get install -y nodejs >/dev/null
+  elif command -v dnf >/dev/null 2>&1; then
+    dnf install -y nodejs npm >/dev/null || dnf install -y nodejs >/dev/null
+  elif command -v yum >/dev/null 2>&1; then
+    yum install -y nodejs npm >/dev/null || yum install -y nodejs >/dev/null
+  else
+    err "未找到受支持的包管理器（apt-get/dnf/yum），无法自动安装 npm。"
+    exit 1
+  fi
+
+  if ! command -v npm >/dev/null 2>&1; then
+    err "npm 自动安装失败，请手动安装 Node.js(含 npm) 后重试。"
+    exit 1
+  fi
+}
+
 write_env(){
   [[ -s "$ENV_FILE" ]] && return
   cat > "$ENV_FILE" <<EOF
@@ -223,15 +246,9 @@ setup_binary_mode(){
     curl -fsSL --retry 3 -o "$APP_DIR/package-lock.json" "$PANEL_LOCK_URL?t=$(date +%s)" || warn "GitHub 获取 package-lock.json 失败，保留现有文件"
   fi
 
-  # 运行模式为 Node Runtime，需要安装 JS 依赖；但不通过 apt 强装 node/npm，避免版本冲突
-  if command -v npm >/dev/null 2>&1; then
-    (cd "$APP_DIR" && npm install --omit=dev --no-audit --no-fund >/dev/null)
-  elif command -v corepack >/dev/null 2>&1; then
-    (cd "$APP_DIR" && corepack npm install --omit=dev --no-audit --no-fund >/dev/null)
-  else
-    err "未检测到 npm，无法安装运行依赖。请先安装 Node.js(含 npm) 后重试。"
-    exit 1
-  fi
+  # 运行模式为 Node Runtime，需要安装 JS 依赖；无 npm 时自动安装
+  ensure_node_npm
+  (cd "$APP_DIR" && npm install --omit=dev --no-audit --no-fund >/dev/null)
   write_version_meta install
 
   cat > "/etc/systemd/system/${SERVICE_NAME}.service" <<EOF
