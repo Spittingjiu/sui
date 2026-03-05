@@ -192,37 +192,31 @@ EOF
 install_xray_if_needed(){
   if [[ ! -x /usr/local/bin/xray ]]; then
     log "安装 Xray core..."
-    local tmp url tag
-    tmp=$(mktemp -d)
 
-    # 优先使用 GitHub 官方 latest 直链（避免 API 返回非资产内容）
-    url="https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip"
-
-    # 若直链失败，再尝试通过 API 解析真实资产链接
-    if ! curl -fL --retry 5 --retry-delay 2 -A "sui-installer" -o "$tmp/xray.zip" "$url"; then
-      url=$(curl -fsSL -A "sui-installer" https://api.github.com/repos/XTLS/Xray-core/releases/latest         | grep 'browser_download_url'         | grep 'Xray-linux-64.zip"'         | head -n1         | sed -E 's/.*"(https:[^"]+)".*/\1/' || true)
-
-      if [[ -z "${url:-}" ]]; then
-        tag=$(curl -fsSL -A "sui-installer" https://api.github.com/repos/XTLS/Xray-core/releases/latest           | grep '"tag_name"'           | head -n1           | sed -E 's/.*"([^"]+)".*/\1/' || true)
-        [[ -n "$tag" ]] || tag="v26.2.6"
-        url="https://github.com/XTLS/Xray-core/releases/download/${tag}/Xray-linux-64.zip"
-      fi
-
-      curl -fL --retry 5 --retry-delay 2 -A "sui-installer" -o "$tmp/xray.zip" "$url"
+    # 方案A（优先）：官方安装脚本，稳定处理架构/链接变化
+    if bash <(curl -fsSL https://raw.githubusercontent.com/XTLS/Xray-install/main/install-release.sh) install >/dev/null 2>&1; then
+      command -v xray >/dev/null 2>&1 || ln -sf /usr/local/bin/xray /usr/bin/xray || true
+      return 0
     fi
 
-    # 校验下载内容必须是可解压 zip；否则走固定版本兜底
+    warn "官方安装脚本失败，回退手动下载..."
+    local tmp
+    tmp=$(mktemp -d)
+    curl -fL --retry 5 --retry-delay 2 -A "sui-installer" -o "$tmp/xray.zip"       "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip"
+
     if ! unzip -t "$tmp/xray.zip" >/dev/null 2>&1; then
-      warn "Xray 下载内容不是有效 zip，回退固定版本 v26.2.6"
-      curl -fL --retry 5 --retry-delay 2 -A "sui-installer" -o "$tmp/xray.zip" "https://github.com/XTLS/Xray-core/releases/download/v26.2.6/Xray-linux-64.zip"
+      warn "latest 包异常，回退固定版本 v26.2.6"
+      curl -fL --retry 5 --retry-delay 2 -A "sui-installer" -o "$tmp/xray.zip"         "https://github.com/XTLS/Xray-core/releases/download/v26.2.6/Xray-linux-64.zip"
       unzip -t "$tmp/xray.zip" >/dev/null
     fi
 
     unzip -o "$tmp/xray.zip" -d "$tmp" >/dev/null
     install -m 0755 "$tmp/xray" /usr/local/bin/xray
+    ln -sf /usr/local/bin/xray /usr/bin/xray || true
     rm -rf "$tmp"
   fi
 }
+
 
 setup_binary_mode(){
   mkdir -p "$APP_DIR/public"
