@@ -246,8 +246,7 @@ setup_binary_mode(){
     curl -fsSL --retry 3 -o "$APP_DIR/package-lock.json" "$PANEL_LOCK_URL?t=$(date +%s)" || warn "GitHub 获取 package-lock.json 失败，保留现有文件"
   fi
 
-  # 运行模式为 Node Runtime，需要安装 JS 依赖；无 npm 时自动安装
-  ensure_node_npm
+  # 运行模式为 Node Runtime，前置步骤已确保 npm 可用
   (cd "$APP_DIR" && npm install --omit=dev --no-audit --no-fund >/dev/null)
   write_version_meta install
 
@@ -521,8 +520,9 @@ main(){
   preflight
   progress_step 3 "$total" "备份旧配置"
   backup_existing_state
-  progress_step 4 "$total" "安装基础依赖"
+  progress_step 4 "$total" "安装基础依赖（含 Node.js/npm）"
   apt_base
+  ensure_node_npm
   progress_step 5 "$total" "检查/安装 Xray"
   install_xray_if_needed
   progress_step 6 "$total" "写入默认环境配置"
