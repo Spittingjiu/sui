@@ -77,12 +77,6 @@ ensure_node_npm(){
     need_install=1
   fi
 
-  if [[ "$need_install" -eq 1 ]]; then
-    log "未检测到 npm，正在自动安装 Node.js/npm..."
-  else
-    log "检测到 npm 版本过旧（v${npm_major}），正在升级到兼容 lockfile v3 的版本..."
-  fi
-
   if command -v apt-get >/dev/null 2>&1; then
     apt-get update -y >/dev/null
     # Debian/Ubuntu 默认源常较旧，优先切到 NodeSource 20
@@ -288,7 +282,7 @@ setup_binary_mode(){
   fi
 
   # 运行模式为 Node Runtime，前置步骤已确保 npm 可用
-  (cd "$APP_DIR" && npm install --omit=dev --no-audit --no-fund >/dev/null)
+  (cd "$APP_DIR" && npm install --omit=dev --no-audit --no-fund >/dev/null 2>&1)
   write_version_meta install
 
   cat > "/etc/systemd/system/${SERVICE_NAME}.service" <<EOF
