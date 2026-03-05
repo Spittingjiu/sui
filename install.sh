@@ -65,24 +65,50 @@ apt_base(){
 }
 
 ensure_node_npm(){
+  local need_install=0 need_upgrade=0 npm_major=0
+
   if command -v npm >/dev/null 2>&1; then
-    return 0
+    npm_major=$(npm -v 2>/dev/null | awk -F. '{print $1}' || echo 0)
+    if [[ "${npm_major:-0}" -ge 9 ]]; then
+      return 0
+    fi
+    need_upgrade=1
+  else
+    need_install=1
   fi
-  log "未检测到 npm，正在自动安装 Node.js/npm..."
+
+  if [[ "$need_install" -eq 1 ]]; then
+    log "未检测到 npm，正在自动安装 Node.js/npm..."
+  else
+    log "检测到 npm 版本过旧（v${npm_major}），正在升级到兼容 lockfile v3 的版本..."
+  fi
+
   if command -v apt-get >/dev/null 2>&1; then
     apt-get update -y >/dev/null
-    apt-get install -y nodejs npm >/dev/null || apt-get install -y nodejs >/dev/null
+    # Debian/Ubuntu 默认源常较旧，优先切到 NodeSource 20
+    if ! command -v node >/dev/null 2>&1 || [[ "$need_upgrade" -eq 1 ]]; then
+      curl -fsSL https://deb.nodesource.com/setup_20.x | bash - >/dev/null 2>&1 || true
+      apt-get install -y nodejs >/dev/null
+    else
+      apt-get install -y nodejs npm >/dev/null || apt-get install -y nodejs >/dev/null
+    fi
   elif command -v dnf >/dev/null 2>&1; then
     dnf install -y nodejs npm >/dev/null || dnf install -y nodejs >/dev/null
   elif command -v yum >/dev/null 2>&1; then
     yum install -y nodejs npm >/dev/null || yum install -y nodejs >/dev/null
   else
-    err "未找到受支持的包管理器（apt-get/dnf/yum），无法自动安装 npm。"
+    err "未找到受支持的包管理器（apt-get/dnf/yum），无法自动安装/升级 npm。"
     exit 1
   fi
 
   if ! command -v npm >/dev/null 2>&1; then
     err "npm 自动安装失败，请手动安装 Node.js(含 npm) 后重试。"
+    exit 1
+  fi
+
+  npm_major=$(npm -v 2>/dev/null | awk -F. '{print $1}' || echo 0)
+  if [[ "${npm_major:-0}" -lt 9 ]]; then
+    err "npm 版本仍过旧（$(npm -v 2>/dev/null || echo unknown)），请检查系统源后重试。"
     exit 1
   fi
 }
