@@ -200,10 +200,10 @@ install_xray_if_needed(){
 
     # 若直链失败，再尝试通过 API 解析真实资产链接
     if ! curl -fL --retry 5 --retry-delay 2 -A "sui-installer" -o "$tmp/xray.zip" "$url"; then
-      url=$(curl -fsSL -A "sui-installer" https://api.github.com/repos/XTLS/Xray-core/releases/latest         | grep 'browser_download_url'         | grep 'Xray-linux-64.zip"'         | head -n1         | sed -E 's/.*"(https:[^"]+)".*//' || true)
+      url=$(curl -fsSL -A "sui-installer" https://api.github.com/repos/XTLS/Xray-core/releases/latest         | grep 'browser_download_url'         | grep 'Xray-linux-64.zip"'         | head -n1         | sed -E 's/.*"(https:[^"]+)".*/\1/' || true)
 
       if [[ -z "${url:-}" ]]; then
-        tag=$(curl -fsSL -A "sui-installer" https://api.github.com/repos/XTLS/Xray-core/releases/latest | grep '"tag_name"' | head -n1 | sed -E 's/.*"([^"]+)".*//' || true)
+        tag=$(curl -fsSL -A "sui-installer" https://api.github.com/repos/XTLS/Xray-core/releases/latest           | grep '"tag_name"'           | head -n1           | sed -E 's/.*"([^"]+)".*/\1/' || true)
         [[ -n "$tag" ]] || tag="v26.2.6"
         url="https://github.com/XTLS/Xray-core/releases/download/${tag}/Xray-linux-64.zip"
       fi
