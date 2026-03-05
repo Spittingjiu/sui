@@ -192,11 +192,25 @@ EOF
 install_xray_if_needed(){
   if [[ ! -x /usr/local/bin/xray ]]; then
     log "安装 Xray core..."
-    local tag tmp
-    tag=$(curl -fsSL https://api.github.com/repos/XTLS/Xray-core/releases/latest | grep '"tag_name"' | head -n1 | sed -E 's/.*"([^"]+)".*/\1/')
-    [[ -n "$tag" ]] || tag="v26.2.4"
+    local tmp url tag
     tmp=$(mktemp -d)
-    curl -fsSL --retry 3 -o "$tmp/xray.zip" "https://github.com/XTLS/Xray-core/releases/download/${tag}/Xray-linux-64.zip"
+
+    # 方案1：从 GitHub API 读取最新 release 的真实下载链接（最稳）
+    url=$(curl -fsSL https://api.github.com/repos/XTLS/Xray-core/releases/latest       | grep 'browser_download_url'       | grep 'Xray-linux-64.zip"'       | head -n1       | sed -E 's/.*"(https:[^"]+)".*/\1/' || true)
+
+    # 方案2：按 tag 组装 URL（回退）
+    if [[ -z "${url:-}" ]]; then
+      tag=$(curl -fsSL https://api.github.com/repos/XTLS/Xray-core/releases/latest | grep '"tag_name"' | head -n1 | sed -E 's/.*"([^"]+)".*/\1/' || true)
+      [[ -n "$tag" ]] || tag="v26.2.6"
+      url="https://github.com/XTLS/Xray-core/releases/download/${tag}/Xray-linux-64.zip"
+    fi
+
+    # 下载（失败再做最终兜底版本）
+    if ! curl -fL --retry 5 --retry-delay 2 -o "$tmp/xray.zip" "$url"; then
+      warn "Xray 最新版本下载失败，回退固定版本 v26.2.6"
+      curl -fL --retry 5 --retry-delay 2 -o "$tmp/xray.zip" "https://github.com/XTLS/Xray-core/releases/download/v26.2.6/Xray-linux-64.zip"
+    fi
+
     unzip -o "$tmp/xray.zip" -d "$tmp" >/dev/null
     install -m 0755 "$tmp/xray" /usr/local/bin/xray
     rm -rf "$tmp"
