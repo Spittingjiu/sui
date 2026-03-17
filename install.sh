@@ -487,6 +487,45 @@ PY
   echo "面板访问地址: https://${domain}/"
 }
 
+uninstall_sui(){
+  local keep_data="Y"
+
+  echo "警告：此操作将卸载 SUI 面板与相关 systemd 服务。"
+  read -r -p "是否保留现有数据文件（inbounds/forwards/面板设置）？[Y/n]: " keep_data
+  keep_data="${keep_data:-Y}"
+
+  read -r -p "确认卸载请输入 YES: " confirm
+  if [[ "${confirm:-}" != "YES" ]]; then
+    echo "已取消卸载"
+    return 0
+  fi
+
+  systemctl stop sui-panel.service >/dev/null 2>&1 || true
+  systemctl disable sui-panel.service >/dev/null 2>&1 || true
+  systemctl stop sui-xray-core.service >/dev/null 2>&1 || true
+  systemctl disable sui-xray-core.service >/dev/null 2>&1 || true
+
+  rm -f /etc/systemd/system/sui-panel.service
+  rm -f /etc/systemd/system/sui-xray-core.service
+  systemctl daemon-reload
+
+  rm -f /usr/local/bin/sui
+  rm -f /etc/default/sui-panel
+  rm -f /etc/sui-panel.mode
+
+  if [[ "$keep_data" =~ ^[Nn]$ ]]; then
+    rm -rf /opt/sui-panel
+    rm -rf /etc/sui-xray
+    rm -rf /var/lib/sui-installer
+    echo "已删除程序与数据目录"
+  else
+    rm -rf /opt/sui-panel/server.mjs /opt/sui-panel/public /opt/sui-panel/node_modules /opt/sui-panel/package.json /opt/sui-panel/package-lock.json /opt/sui-panel/VERSION /opt/sui-panel/sui-panel-bin* >/dev/null 2>&1 || true
+    echo "已卸载程序，保留数据目录（如 /opt/sui-panel/data 与 /etc/sui-xray）"
+  fi
+
+  echo "SUI 卸载完成"
+}
+
 while true; do
   echo "===== SUI 菜单 ====="
   echo "1) 修改面板账号密码"
@@ -494,6 +533,7 @@ while true; do
   echo "3) 修改面板端口"
   echo "4) 启用 BBR + fq"
   echo "5) 一键SSL（申请证书 + Xray TLS + 面板原生HTTPS）"
+  echo "6) 卸载 SUI"
   echo "0) 退出"
   read -r -p "选择: " c
   case "$c" in
@@ -540,6 +580,7 @@ PY2
     3) read -r -p "新端口: " pt; set_kv PORT "$pt"; reload_apply; echo "已更新端口为 $pt"; read -r -p "回车继续" ;;
     4) opt_bbr; echo "已启用 BBR + fq"; read -r -p "回车继续" ;;
     5) issue_tls_cert_and_apply; read -r -p "回车继续" ;;
+    6) uninstall_sui; read -r -p "回车继续" ;;
     0) exit 0 ;;
   esac
 done
