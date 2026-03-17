@@ -254,7 +254,10 @@ setup_binary_mode(){
   install -m 0755 "$tmp_bin" "$APP_DIR/sui-panel-bin"
   rm -f "$tmp_bin"
   # 清理历史旧二进制，避免占盘（仅保留最近2个）
-  ls -1t "$APP_DIR"/sui-panel-bin.old.* 2>/dev/null | awk 'NR>2' | xargs -r rm -f
+  mapfile -t old_bins < <(find "$APP_DIR" -maxdepth 1 -type f -name 'sui-panel-bin.old.*' -printf '%T@ %p\n' 2>/dev/null | sort -nr | awk '{print $2}')
+  if (( ${#old_bins[@]} > 2 )); then
+    printf '%s\n' "${old_bins[@]:2}" | xargs -r rm -f
+  fi
 
   if ! curl -fsSL --retry 3 -o "$APP_DIR/server.mjs" "$SERVER_URL"; then
     warn "GitHub 获取 server.mjs 失败，回退到历史包源"
