@@ -6,7 +6,7 @@ const SOCAT_BIN = process.env.SUI_SOCAT_BIN || '/usr/bin/socat';
 const RELOAD_INTERVAL_MS = Number(process.env.SUI_FORWARD_RELOAD_MS || 5000);
 const START_CONCURRENCY = Number(process.env.SUI_FORWARD_START_CONCURRENCY || 4);
 
-const procs = new Map(); // key => child
+const procs = new Map();
 const startQueue = [];
 let startTimer = null;
 
@@ -42,7 +42,7 @@ function loadRules() {
   }
 }
 
-function spawnSocat(rule, proto) {
+function spawnSocat(rule, proto, key) {
   const listen = proto === 'udp'
     ? `UDP-LISTEN:${rule.listenPort},reuseaddr,fork`
     : `TCP-LISTEN:${rule.listenPort},reuseaddr,fork`;
@@ -53,6 +53,11 @@ function spawnSocat(rule, proto) {
   child.stderr.on('data', d => log(`${rule.id}/${proto}`, String(d).trim()));
   child.on('exit', (code, sig) => {
     log(`exit ${rule.id}/${proto} code=${code} sig=${sig}`);
+    const cur = procs.get(key);
+    if (cur === child) {
+      procs.delete(key);
+      setTimeout(reconcile, 200);
+    }
   });
   return child;
 }
@@ -63,7 +68,7 @@ function pumpStartQueue() {
     let n = 0;
     while (n < START_CONCURRENCY && startQueue.length) {
       const job = startQueue.shift();
-      const child = spawnSocat(job.rule, job.proto);
+      const child = spawnSocat(job.rule, job.proto, job.key);
       procs.set(job.key, child);
       log('started', job.key);
       n++;
@@ -83,7 +88,6 @@ function reconcile() {
     for (const key of ruleKeys(rule)) desired.set(key, rule);
   }
 
-  // stop removed
   for (const [key, child] of procs.entries()) {
     if (!desired.has(key)) {
       try { child.kill('SIGTERM'); } catch {}
@@ -92,7 +96,6 @@ function reconcile() {
     }
   }
 
-  // start missing (queued to avoid burst spawning)
   for (const [key, rule] of desired.entries()) {
     if (procs.has(key)) continue;
     if (startQueue.find(x => x.key === key)) continue;
