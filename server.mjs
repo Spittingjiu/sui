@@ -916,9 +916,9 @@ app.post('/api/inbounds/add-reality-quick', async (req, res) => {
   if (!port) return res.status(400).json({ success: false, msg: 'no free port' });
   const keyOut = shell(`${XRAY_BIN} x25519`);
   const privateKey = (keyOut.match(/Private(?:\s*key|Key):\s*([^\n\r]+)/i) || [,''])[1].trim();
-  const publicKey = (keyOut.match(/(?:Public\s*key|Password):\s*([^\n\r]+)/i) || [,''])[1].trim();
+  const publicKey = (keyOut.match(/(?:Public\s*key|Password(?:\s*\(PublicKey\))?):\s*([^\n\r]+)/i) || [,''])[1].trim();
   const shortId = crypto.randomBytes(8).toString('hex');
-  const pickedSni = String(req.body?.sni || 'www.cloudflare.com');
+  const pickedSni = String(req.body?.sni || 'www.apple.com');
   const payload = buildInbound({
     protocol: 'vless', network: 'tcp', security: 'reality',
     port, remark: req.body?.remark || randomRemark('reality'),
@@ -1225,7 +1225,7 @@ function buildLinksForInbound(ib, reqHeaders = {}) {
     if (pri) {
       try {
         const out = shell(`${XRAY_BIN} x25519 -i '${pri}'`);
-        realityPbK = (out.match(/(?:Public\s*key|Password):\s*([^\n\r]+)/i) || [,''])[1].trim();
+        realityPbK = (out.match(/(?:Public\s*key|Password(?:\s*\(PublicKey\))?):\s*([^\n\r]+)/i) || [,''])[1].trim();
       } catch {}
     }
   }
