@@ -1,102 +1,139 @@
-# SUI Panel 苏逸面板 🚀
+# SUI Panel 苏逸面板
 
-SUI Panel 是一个面向真实运维场景的 Xray 管理面板，目标很直接：
-- **安装简单**：一条命令即可部署
-- **维护省心**：内置菜单可直接改账号、改端口、更新版本
-- **状态清晰**：服务状态、版本信息、端口监听一眼可见
-- **数据可控**：核心配置与面板数据都落在固定路径，便于备份与恢复
+**一个面向 VPS 运维场景的轻量级 Xray 管理面板。**
 
-适合想要“快速上线 + 稳定长期用”的 VPS 用户。✨
+SUI 的目标很直接：
+- 安装简单
+- 运维省心
+- 节点管理直观
+- 可和 `sui-sub` 无缝联动做订阅分发
 
-## 🚀 搭配 sui-sub：让订阅分发更丝滑
-`sui` 负责把节点管好，`sui-sub` 负责把订阅发好。
-当你有多台机器、多套面板，或者想给不同设备下发不同节点组合时，`sui-sub` 会非常顺手：
-- 项目地址：https://github.com/Spittingjiu/sui-sub
-- 功能：多源自动同步、节点级订阅编辑、多订阅链接管理、SUI 管理页
+---
 
-### 与 sui-sub 的联动说明
-在 SUI 面板的 **「对接Token」** 标签页，已内置一键联动：
-1. 填入 `sui-sub` 地址
-2. 填入 `sui-sub` 用户名
-3. （可选）填写写入到 sub 的源名称
-4. 点击 **「一键写入」**
+## Quick Overview
 
-系统会自动把当前 SUI 面板地址 + API Token 写入 `sui-sub`，无需手动复制粘贴。
+| 能力 | 是否支持 |
+|---|:---:|
+| 一键安装（脚本） | ✅ |
+| 菜单化运维（改账号/端口/SSL/卸载） | ✅ |
+| 节点管理（新增/编辑/删除/开关） | ✅ |
+| 节点链接与二维码导出 | ✅ |
+| 链式代理（http/socks5/reality/ss） | ✅ |
+| 域名分流增强（自动路由策略） | ✅ |
+| 与 `sui-sub` 一键对接 | ✅ |
+| 原生 HTTPS（申请证书 + 面板 TLS） | ✅ |
 
-## ✨ 功能
+---
 
-- Web 面板登录与会话管理
-- 入站（Inbounds）管理
-- 自动生成并维护 Xray 配置
-- systemd 服务联动管理（`sui-panel.service` / `sui-xray-core.service`）
-- 节点链接与二维码生成
-- 链式代理（单节点绑定 1 个下游：`http` / `socks5` / `reality(vless)` / `shadowsocks`）
-- 下游连通性测试（面板内一键测试 host/port）
-- 域名分流增强模式（后端自动写路由，无需手改配置）
+## 适合谁？
 
-## ⚡ 一键安装（推荐）
+适合：
+- 想在 VPS 上快速搭建并长期维护 Xray
+- 希望通过菜单完成常见运维操作
+- 有多机节点，需要后续接入 `sui-sub` 做统一订阅
+
+不适合：
+- 需要超复杂企业级多租户权限系统
+
+---
+
+## 快速安装
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/Spittingjiu/sui/main/install.sh)
 ```
 
-> 安装器已固定为二进制模式（不再走 Docker 安装流程）。
-
-## 🧭 安装后常用命令
+安装完成后执行：
 
 ```bash
 sui
 ```
 
-在菜单里可直接：
-- 修改用户名/密码
-- 修改端口
-- 更新 SUI
-- 查看服务状态与版本
+进入菜单即可管理。
 
-## 🧩 主要文件是干什么的
+---
 
-- `install.sh`：一键安装/更新入口（拉取二进制、写 systemd、初始化环境）
-- `server.mjs`：后端核心逻辑（登录鉴权、节点管理、状态查询、转发 API）
-- `forwarder.mjs`：端口转发守护进程（单服务加载规则并管理 socat 子进程）
-- `public/index.html`：前端页面（面板 UI + 调用后端 API）
-- `dist/sui-panel-full-linux-amd64`：最终可执行二进制（生产环境主要运行这个）
-- `README.md`：使用说明文档
+## 默认安装信息
 
-## 🗂️ 关键路径
+- 面板端口：`8810`
+- 默认账号：`admin`
+- 默认密码：`admin123`
 
-- 面板程序目录：`/opt/sui-panel`
+> 建议首次登录后立即修改账号密码。
+
+---
+
+## 常用菜单能力
+
+- 修改面板账号密码
+- 显示当前用户信息（用户名/密码/端口/协议）
+- 修改面板端口
+- 启用 BBR + fq
+- 一键 SSL（证书申请 + Xray TLS + 面板原生 HTTPS）
+- 一键卸载
+- 一键对接 `sui-sub`
+
+---
+
+## 与 sui-sub 联动（推荐）
+
+在 SUI 的「对接Token」页可直接填写：
+- `sui-sub` 地址
+- `sui-sub` 用户名
+- `sui-sub` 密码
+- （可选）源名称
+
+点击后会自动将当前 SUI 面板地址和 Token 写入 `sui-sub`，免手工复制。
+
+---
+
+## 关键路径
+
+- 程序目录：`/opt/sui-panel`
 - 环境变量：`/etc/default/sui-panel`
 - 面板数据：`/opt/sui-panel/data/inbounds.json`
 - 转发数据：`/opt/sui-panel/data/forwards.json`
 - 面板设置：`/opt/sui-panel/data/panel-settings.json`
 - Xray 配置：`/etc/sui-xray/config.json`
 
-## 🔀 链式代理与域名分流（新）
+---
 
-在“节点管理 → 编辑节点”里可直接配置，不需要手改 Xray 配置文件：
+## 运维建议
 
-- 开启“链式代理”后，绑定 1 个下游节点（`http` / `socks5` / `reality(vless)` / `shadowsocks`）
-- 可填写“域名规则”（支持直接粘贴 URL，后端会自动清洗）：
-  - `example.com` → 匹配根域 + 子域
-  - `api.example.com` → 精确匹配该子域
-  - `.example.com` / `*.example.com` → 子域泛匹配
-  - `https://chat.openai.com/` / `wss://a.b.com:443/path` → 自动提取域名后匹配
-- 多域名支持多种分隔：
-  - 逗号（中英文都行）：`example.com,api.example.com，.demo.net`
-  - 分号（中英文都行）或空格
-  - 换行：一行一个
-- 开启“域名分流增强（推荐）”后，后端会自动：
-  - 开启入站 sniff 路由增强
-  - 设置 `domainStrategy=IPIfNonMatch`
-  - 应用 UDP/443 策略（默认拦截，减少 QUIC 绕过）
-
-## 🔐 注意事项
-
-- 首次部署后请立即修改默认账号密码
-- 生产环境建议限制面板访问来源（防火墙/安全组）
-- 更新后若页面异常，先强刷浏览器缓存（Ctrl+F5）
+- 上线后限制面板访问来源（防火墙/安全组）
+- 定期备份 `/opt/sui-panel/data` 与 `/etc/sui-xray/config.json`
+- 升级后若页面异常，先强制刷新浏览器缓存
 
 ---
 
-Made with 🛠️ by Spittingjiu
+## Sprint A 冒烟检查（推荐）
+
+新增了发布前快速检查脚本：
+
+```bash
+PANEL_BASE=http://127.0.0.1:12345 \
+PANEL_USER=admin \
+PANEL_PASS=admin123 \
+bash scripts/sprint-a-smoke.sh
+```
+
+脚本会检查：
+- 登录
+- Token 接口
+- Bootstrap 接口
+
+通过后再发布，可降低回归风险。
+
+---
+
+## 生态项目
+
+- SUI：节点管理层（本项目）
+- sui-sub：订阅编排与分发层  
+  https://github.com/Spittingjiu/sui-sub
+
+---
+
+## License
+
+GPL-3.0
