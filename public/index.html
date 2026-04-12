@@ -693,10 +693,11 @@ const xrayConfigText=$('xrayConfigText');
 let API_PREFIX='';
 
 // 核心API请求函数（保留原有逻辑）
-function hdr(){const t=localStorage.sessionToken||'';return t?{'Authorization':'Bearer '+t}:{}};
+function hdr(){const t=localStorage.sessionToken||'';return t?{'Authorization':'Bearer '+t}:{};};
 function panelBasePath(){const p=location.pathname||'/';if(p==='/'||p==='')return '';if(p.endsWith('/'))return p.slice(0,-1);if(/\.html?$/.test(p))return p.replace(/\/[^/]+$/,'');return p;}
 function normPrefix(p){if(!p||p==='/'||p==='null'||p==='undefined')return '';return String(p).startsWith('/')?String(p).replace(/\/$/,''):'/'+String(p).replace(/\/$/,'');}
-async function api(u,o={}){const parse=async(url)=>{const r=await fetch(url,{...o,headers:{'content-type':'application/json',...hdr(),...(o.headers||{})}});const txt=await r.text();let j={};try{j=txt?JSON.parse(txt):{};}catch{j={success:false,msg:'non-json response: '+(txt||'').slice(0,120)};}if(j.success===undefined)j.success=r.ok;return j;};try{const base=normPrefix(panelBasePath());const pref=normPrefix(API_PREFIX);const tries=[];if((u.startsWith('/api/')||u.startsWith('/auth/'))&&pref)tries.push(pref+u);tries.push(u);if((u.startsWith('/api/')||u.startsWith('/auth/'))&&base&&base!==pref)tries.push(base+u);let out={success:false,msg:'uninitialized'};for(const t of tries){out=await parse(t);if(out.success||!String(out.msg||'').startsWith('non-json response'))break;}return out;}catch(e){return{success:false,msg:e?.message||'network error'}}}
+function proxyBasePath(){const m=(location.pathname||'').match(/^\/panel-proxy\/\d+/);return m?m[0]:'';}
+async function api(u,o={}){const parse=async(url)=>{const r=await fetch(url,{...o,headers:{'content-type':'application/json',...hdr(),...(o.headers||{})}});const txt=await r.text();let j={};try{j=txt?JSON.parse(txt):{};}catch{j={success:false,msg:'non-json response: '+(txt||'').slice(0,120)};}if(j.success===undefined)j.success=r.ok;return j;};try{const base=normPrefix(panelBasePath());const pref=normPrefix(API_PREFIX);const pbase=normPrefix(proxyBasePath());const tries=[];if((u.startsWith('/api/')||u.startsWith('/auth/'))&&pref)tries.push(pref+u);if((u.startsWith('/api/')||u.startsWith('/auth/'))&&pbase)tries.push(pbase+u);tries.push(u);if((u.startsWith('/api/')||u.startsWith('/auth/'))&&base&&base!==pref)tries.push(base+u);let out={success:false,msg:'uninitialized'};for(const t of tries){out=await parse(t);if(out.success||!String(out.msg||'').startsWith('non-json response'))break;}return out;}catch(e){return{success:false,msg:e?.message||'network error'}}}
 
 // 登录逻辑（保留原有功能）
 async function doLogin(){
