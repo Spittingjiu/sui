@@ -134,6 +134,11 @@ bash scripts/sprint-a-smoke.sh
 
 ---
 
+## API Documentation
+
+- English: `docs/API.md`
+- 中文：`docs/API.zh-CN.md`
+
 ## License
 
 GPL-3.0
