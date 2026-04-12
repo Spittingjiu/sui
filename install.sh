@@ -490,6 +490,121 @@ PY
   echo "面板访问地址: https://${domain}/"
 }
 
+connect_sub(){
+  local sub_url sub_user sub_pass source_name port tls_enable panel_token
+
+  read -r -p "请输入 sui-sub 地址（如: https://sub.example.com）: " sub_url
+  sub_url="${sub_url%/}"
+  [[ -n "${sub_url:-}" ]] || { echo "sui-sub 地址不能为空"; return 1; }
+
+  read -r -p "请输入 sui-sub 用户名: " sub_user
+  [[ -n "${sub_user:-}" ]] || { echo "用户名不能为空"; return 1; }
+
+  read -r -p "请输入 sui-sub 密码: " sub_pass
+  [[ -n "${sub_pass:-}" ]] || { echo "密码不能为空"; return 1; }
+
+  read -r -p "写入到 sub 的源名称（默认: sui-panel）: " source_name
+  source_name="${source_name:-sui-panel}"
+
+  port=$(grep -E '^PORT=' "$ENV_FILE" 2>/dev/null | tail -n1 | cut -d= -f2-)
+  port="${port:-8810}"
+  tls_enable=$(grep -E '^PANEL_TLS_ENABLE=' "$ENV_FILE" 2>/dev/null | tail -n1 | cut -d= -f2-)
+  tls_enable="${tls_enable:-0}"
+
+  panel_token=$(python3 - <<'PY'
+import json
+from pathlib import Path
+
+t = ''
+ps = Path('/opt/sui-panel/data/panel-settings.json')
+if ps.exists():
+    try:
+        o = json.loads(ps.read_text(encoding='utf-8'))
+        t = str(o.get('panelToken', '') or '').strip()
+    except Exception:
+        pass
+if not t:
+    env = Path('/etc/default/sui-panel')
+    if env.exists():
+        for line in env.read_text(encoding='utf-8', errors='ignore').splitlines():
+            if line.startswith('PANEL_TOKEN='):
+                t = line.split('=', 1)[1].strip()
+                break
+print(t)
+PY
+)
+
+  if [[ -z "${panel_token:-}" ]]; then
+    echo "未读取到面板 Token，请先确认面板已正常初始化。"
+    return 1
+  fi
+
+  SUB_URL="$sub_url" SUB_USER="$sub_user" SUB_PASS="$sub_pass" SOURCE_NAME="$source_name" PANEL_PORT="$port" PANEL_TLS_ENABLE="$tls_enable" PANEL_TOKEN="$panel_token" python3 - <<'PY'
+import json
+import os
+import ssl
+import sys
+import urllib.error
+import urllib.request
+
+sub_url = os.environ.get('SUB_URL', '').rstrip('/')
+sub_user = os.environ.get('SUB_USER', '')
+sub_pass = os.environ.get('SUB_PASS', '')
+source_name = os.environ.get('SOURCE_NAME', 'sui-panel')
+panel_port = os.environ.get('PANEL_PORT', '8810')
+tls_enable = str(os.environ.get('PANEL_TLS_ENABLE', '0')).lower() in {'1','true','yes','on'}
+panel_token = os.environ.get('PANEL_TOKEN', '')
+
+payload = json.dumps({
+    'subUrl': sub_url,
+    'subUsername': sub_user,
+    'subPassword': sub_pass,
+    'sourceName': source_name
+}).encode('utf-8')
+
+ctx = ssl._create_unverified_context()
+urls = []
+if tls_enable:
+    urls.append(f'https://127.0.0.1:{panel_port}/api/panel/connect-sub')
+    urls.append(f'http://127.0.0.1:{panel_port}/api/panel/connect-sub')
+else:
+    urls.append(f'http://127.0.0.1:{panel_port}/api/panel/connect-sub')
+    urls.append(f'https://127.0.0.1:{panel_port}/api/panel/connect-sub')
+
+last_err = None
+for url in urls:
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        method='POST',
+        headers={
+            'content-type': 'application/json',
+            'x-panel-token': panel_token
+        }
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=25, context=ctx) as r:
+            txt = r.read().decode('utf-8', 'ignore')
+        j = json.loads(txt or '{}')
+        if j.get('success'):
+            print(j.get('msg') or '已写入到 sui-sub')
+            sys.exit(0)
+        last_err = j.get('msg') or '对接失败'
+    except urllib.error.HTTPError as e:
+        body = e.read().decode('utf-8', 'ignore')
+        try:
+            j = json.loads(body or '{}')
+            last_err = j.get('msg') or f'HTTP {e.code}'
+        except Exception:
+            last_err = f'HTTP {e.code}'
+    except Exception as e:
+        last_err = str(e)
+
+print(f'对接失败: {last_err or "unknown error"}')
+sys.exit(1)
+PY
+}
+
 uninstall_sui(){
   local keep_data="Y"
 
@@ -536,7 +651,8 @@ while true; do
   echo "3) 修改面板端口"
   echo "4) 启用 BBR + fq"
   echo "5) 一键SSL（申请证书 + Xray TLS + 面板原生HTTPS）"
-  echo "6) 卸载 SUI"
+  echo "6) 一键卸载"
+  echo "7) 一键对接sub"
   echo "0) 退出"
   read -r -p "选择: " c
   case "$c" in
@@ -584,6 +700,7 @@ PY2
     4) opt_bbr; echo "已启用 BBR + fq"; read -r -p "回车继续" ;;
     5) issue_tls_cert_and_apply; read -r -p "回车继续" ;;
     6) uninstall_sui; read -r -p "回车继续" ;;
+    7) connect_sub; read -r -p "回车继续" ;;
     0) exit 0 ;;
   esac
 done
