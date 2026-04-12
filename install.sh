@@ -647,7 +647,7 @@ uninstall_sui(){
 while true; do
   echo "===== SUI 菜单 ====="
   echo "1) 修改面板账号密码"
-  echo "2) 显示当前面板账号密码"
+  echo "2) 显示当前用户信息"
   echo "3) 修改面板端口"
   echo "4) 启用 BBR + fq"
   echo "5) 一键SSL（申请证书 + Xray TLS + 面板原生HTTPS）"
@@ -668,32 +668,51 @@ while true; do
       read -r -p "回车继续"
       ;;
     2)
-      creds=$(python3 - <<'PY2'
+      info=$(python3 - <<'PY2'
 import json
 from pathlib import Path
 u=''
 p=''
+pt=''
+tls=''
+
+env=Path('/etc/default/sui-panel')
+if env.exists():
+    for line in env.read_text(encoding='utf-8', errors='ignore').splitlines():
+        if line.startswith('PANEL_USER='): u=line.split('=',1)[1].strip()
+        if line.startswith('PANEL_PASS='): p=line.split('=',1)[1].strip()
+        if line.startswith('PORT='): pt=line.split('=',1)[1].strip()
+        if line.startswith('PANEL_TLS_ENABLE='): tls=line.split('=',1)[1].strip()
+
 ps=Path('/opt/sui-panel/data/panel-settings.json')
 if ps.exists():
     try:
         o=json.loads(ps.read_text(encoding='utf-8'))
-        u=str(o.get('username','') or '')
-        p=str(o.get('password','') or '')
+        u=str(o.get('username','') or u)
+        p=str(o.get('password','') or p)
     except Exception:
         pass
-if not u:
-    env=Path('/etc/default/sui-panel')
-    if env.exists():
-        for line in env.read_text(encoding='utf-8', errors='ignore').splitlines():
-            if line.startswith('PANEL_USER='): u=line.split('=',1)[1].strip()
-            if line.startswith('PANEL_PASS='): p=line.split('=',1)[1].strip()
-print((u or 'admin') + '\n' + (p or 'admin123'))
+
+u = u or 'admin'
+p = p or 'admin123'
+pt = pt or '8810'
+tls_on = str(tls or '0').strip().lower() in {'1','true','yes','on'}
+proto = 'https' if tls_on else 'http'
+
+print(u)
+print(p)
+print(pt)
+print(proto)
 PY2
 )
-      cu=$(echo "$creds" | awk 'NR==1{print; exit}')
-      cpw=$(echo "$creds" | awk 'NR==2{print; exit}')
+      cu=$(echo "$info" | awk 'NR==1{print; exit}')
+      cpw=$(echo "$info" | awk 'NR==2{print; exit}')
+      cpt=$(echo "$info" | awk 'NR==3{print; exit}')
+      cproto=$(echo "$info" | awk 'NR==4{print; exit}')
       echo "当前用户名: ${cu}"
       echo "当前密码: ${cpw}"
+      echo "当前端口: ${cpt}"
+      echo "当前访问协议: ${cproto}"
       read -r -p "回车继续"
       ;;
     3) read -r -p "新端口: " pt; set_kv PORT "$pt"; reload_apply; echo "已更新端口为 $pt"; read -r -p "回车继续" ;;
