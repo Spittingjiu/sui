@@ -21,28 +21,28 @@
       --blue-indigo: #2a5b84;    /* 青黛色 */
       --blue-indigo-light: #3a7ba8; /* 浅青黛色 */
       --green-ink: #2e5c42;      /* 墨绿 */
-      
+
       /* 文字色 */
       --text-ink: #23201d;       /* 墨色文字 */
       --text-rice: #f5f0e6;      /* 宣纸色文字（深色背景用） */
       --text-muted: #6b5b4b;     /* 浅墨色（次要文字） */
       --text-success: #2e5c42;   /* 墨绿（成功状态） */
       --text-danger: #c4302b;    /* 朱砂红（危险/停用） */
-      
+
       /* 边框/装饰色 */
       --border-ink: #4a4035;     /* 墨色边框 */
       --border-red: #c4302b88;   /* 朱红边框（半透） */
       --border-blue: #2a5b8488;  /* 青黛边框（半透） */
-      
+
       /* 古风尺寸/圆角 - 仿古器物弧度 */
       --radius-arch: 4px;        /* 仿古拱门圆角 */
       --radius-seal: 2px;        /* 印章直角（微圆角） */
       --radius-pearl: 8px;       /* 玉佩圆角 */
-      
+
       /* 阴影 - 水墨晕染效果 */
       --shadow-ink: 0 4px 8px rgba(0, 0, 0, 0.3);   /* 重墨影 */
       --shadow-light: 0 2px 6px rgba(0, 0, 0, 0.15);/* 浅墨影 */
-      
+
       /* 间距 */
       --space-xs: 4px;
       --space-sm: 8px;
@@ -57,21 +57,17 @@
       margin: 0;
       padding: 0;
     }
-    
+
     /* 古风背景 - 宣纸纹理 + 水墨渐变 */
     body {
       margin: 0;
-      background: 
-        url("https://picsum.photos/id/106/2000/2000") repeat fixed,
-        linear-gradient(145deg, var(--bg-rice), var(--bg-rice-dark));
-      background-blend-mode: overlay;
+      background: linear-gradient(145deg, var(--bg-rice), var(--bg-rice-dark));
       color: var(--text-ink);
       /* 优先使用宋体/仿宋等古风字体 */
       font-family: "SimSun", "STSong", "Noto Serif CJK SC", "Source Han Serif CN", serif;
       font-size: 14px;
       line-height: 1.6;
       min-height: 100vh;
-      background-size: 200px;
     }
 
     /* ========== 容器样式 - 仿古卷轴外框 ========== */
@@ -86,7 +82,7 @@
       border-right: 1px solid var(--border-ink);
       box-shadow: var(--shadow-ink);
     }
-    
+
     /* 卷轴上下木轴装饰 */
     .wrap::before, .wrap::after {
       content: "";
@@ -100,13 +96,13 @@
       box-shadow: var(--shadow-ink);
       z-index: 2;
     }
-    
+
     .wrap::before {
       top: 0;
       border-bottom: none;
       border-radius: var(--radius-arch) var(--radius-arch) 0 0;
     }
-    
+
     .wrap::after {
       bottom: 0;
       border-top: none;
@@ -125,7 +121,7 @@
       overflow: hidden;
       transition: all 0.4s ease;
     }
-    
+
     /* 卡片仿古虚线边框装饰（仿宣纸装裱） */
     .card::before {
       content: "";
@@ -139,13 +135,13 @@
       opacity: 0.3;
       transition: opacity 0.3s ease;
     }
-    
+
     .card:hover {
       transform: translateY(-4px);
       box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
       border-color: var(--blue-indigo);
     }
-    
+
     .card:hover::before {
       opacity: 0.6;
       border-color: var(--blue-indigo);
@@ -158,7 +154,7 @@
       align-items: center;
       flex-wrap: wrap;
     }
-    
+
     .grow {
       flex: 1;
     }
@@ -175,19 +171,19 @@
       transition: all 0.3s ease;
       box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
     }
-    
+
     input:focus, select:focus, textarea:focus {
       outline: none;
       border-color: var(--blue-indigo);
       box-shadow: 0 0 0 2px rgba(42, 91, 132, 0.2);
     }
-    
+
     input::placeholder, textarea::placeholder {
       color: var(--text-muted);
       opacity: 0.7;
       font-style: italic;
     }
-    
+
     textarea {
       min-height: 72px;
       resize: vertical;
@@ -209,24 +205,24 @@
       box-shadow: var(--shadow-light);
       text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
     }
-    
+
     button:hover {
       background: linear-gradient(to bottom, var(--blue-indigo), var(--blue-indigo-light));
       transform: translateY(-2px);
       box-shadow: var(--shadow-ink);
       border-color: var(--bg-ink);
     }
-    
+
     button:active {
       transform: translateY(0);
       box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
     }
-    
+
     /* 危险按钮 - 朱砂红（仿朱批） */
     .danger {
       background: linear-gradient(to bottom, var(--red-cinnabar-light), var(--red-cinnabar));
     }
-    
+
     .danger:hover {
       background: linear-gradient(to bottom, var(--red-cinnabar), var(--red-cinnabar-light));
     }
@@ -242,13 +238,13 @@
       transition: all 0.2s ease;
       box-shadow: var(--shadow-light);
     }
-    
+
     .status-ok {
       border-color: var(--green-ink)!important;
       color: var(--text-success)!important;
       background: rgba(46, 92, 66, 0.1);
     }
-    
+
     .status-bad {
       border-color: var(--red-cinnabar)!important;
       color: var(--text-danger)!important;
@@ -260,19 +256,19 @@
       color: var(--text-muted);
       font-style: italic;
     }
-    
+
     h2, b, strong {
       color: var(--bg-ink);
       text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
     }
-    
+
     h2 {
       border-bottom: 1px solid var(--border-ink);
       padding-bottom: 8px;
       margin-bottom: 16px;
       position: relative;
     }
-    
+
     /* 标题下的朱砂点装饰 */
     h2::after {
       content: "";
@@ -293,19 +289,19 @@
       padding: 8px 16px;
       text-shadow: none;
     }
-    
+
     .tabs button.on {
       opacity: 1;
       border-color: var(--blue-indigo);
       background: rgba(42, 91, 132, 0.1);
     }
-    
+
     .tabs button:hover {
       opacity: 1;
       background: rgba(42, 91, 132, 0.05);
       box-shadow: var(--shadow-light);
     }
-    
+
     .tabs b {
       font-size: 18px;
       padding-right: var(--space-md);
@@ -331,12 +327,12 @@
       z-index: 1000;
       backdrop-filter: blur(2px);
     }
-    
+
     .m.show {
       display: flex;
       animation: fadeIn 0.3s ease;
     }
-    
+
     .box {
       width: min(980px, 95vw);
       max-height: 90vh;
@@ -349,7 +345,7 @@
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
       position: relative;
     }
-    
+
     /* 模态框仿古角花装饰 */
     .box::before, .box::after, .box div:first-child::before, .box div:first-child::after {
       content: "";
@@ -360,28 +356,28 @@
       opacity: 0.6;
       z-index: 1;
     }
-    
+
     .box::before {
       top: 10px;
       left: 10px;
       border-right: none;
       border-bottom: none;
     }
-    
+
     .box::after {
       top: 10px;
       right: 10px;
       border-left: none;
       border-bottom: none;
     }
-    
+
     .box div:first-child::before {
       bottom: 10px;
       left: 10px;
       border-right: none;
       border-top: none;
     }
-    
+
     .box div:first-child::after {
       bottom: 10px;
       right: 10px;
@@ -396,13 +392,13 @@
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
       border-width: 2px;
     }
-    
+
     #login h2 {
       font-size: 28px;
       text-align: center;
       font-family: "KaiTi", "STKaiti", cursive;
     }
-    
+
     #le {
       min-height: 18px;
       color: var(--text-danger);
@@ -426,7 +422,7 @@
       from { opacity: 0; }
       to { opacity: 1; }
     }
-    
+
     @keyframes popIn {
       from { opacity: .35; transform: translateY(10px) scale(0.98); }
       to { opacity: 1; transform: translateY(0) scale(1); }
@@ -437,35 +433,35 @@
       .grid {
         grid-template-columns: 1fr;
       }
-      
+
       .row {
         gap: var(--space-sm);
       }
-      
+
       button {
         padding: 8px 10px;
         font-size: 13px;
       }
-      
+
       .wrap {
         padding: var(--space-md);
       }
-      
+
       .card {
         padding: var(--space-md);
       }
-      
+
       .tabs button {
         padding: 6px 12px;
       }
-      
+
       /* 移动端简化卷轴装饰 */
       .wrap::before, .wrap::after {
         width: 80%;
         height: 12px;
       }
     }
-  
+
 .toast-wrap{position:fixed;right:16px;top:16px;z-index:99999;display:flex;flex-direction:column;gap:8px}
 .toast{background:#12213f;border:1px solid #345ea8;color:#eaf1ff;padding:10px 12px;border-radius:10px;box-shadow:0 8px 20px rgba(0,0,0,.35);font-size:13px;max-width:340px;opacity:.98}
 .toast.ok{border-color:#2f7d4a}
@@ -564,7 +560,7 @@
         <span class="grow"></span>
         <span id="xcfgPath" class="badge">/etc/sui-xray/config.json</span>
       </div>
-      <textarea id="xrayConfigText" style="width:100%;min-height:420px;font-family:monospace" placeholder="点击“读取配置”加载当前 Xray 配置"></textarea>
+      <textarea id="xrayConfigText" style="width:100%;min-height:420px;font-family:monospace" placeholder="点击"读取配置"加载当前 Xray 配置"></textarea>
       <div class="muted" style="margin-top:8px">说明：保存时会先做 JSON 校验与 Xray 配置测试，通过后才会落盘。</div>
     </div>
   </div>
@@ -824,7 +820,7 @@ async function loadXrayVersions(){
       if(curv && (v===curv || ('v'+v)===curv || v===('v'+curv))) o.selected=true;
       xvSel.appendChild(o)
     }
-    if(xvHint) xvHint.textContent='提示：下拉选择版本后点“立即安装所选版本”，会自动重启 Xray 服务。';
+    if(xvHint) xvHint.textContent='提示：下拉选择版本后点"立即安装所选版本"，会自动重启 Xray 服务。';
   }else{
     const o=document.createElement('option');o.value='';o.textContent='(版本列表获取失败)';xvSel.appendChild(o);
     if(xvHint) xvHint.textContent='提示：版本列表获取失败（可能是网络原因），请稍后重试。';
