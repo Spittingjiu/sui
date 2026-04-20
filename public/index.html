@@ -600,7 +600,7 @@
     <input id="f_forward_target_host" data-group="forward" placeholder="目标IP/域名" />
     <input id="f_forward_target_port" data-group="forward" placeholder="目标端口" />
 
-    <select id="f_network"><option>tcp</option><option>ws</option></select>
+    <select id="f_network"><option>tcp</option><option>ws</option><option>xhttp</option></select>
     <select id="f_security"><option>none</option><option>tls</option><option value="reality">reality</option></select>
     <input id="f_email" placeholder="email(tag)" />
 
@@ -770,7 +770,7 @@ async function showQR(id){const r=await api('/api/inbounds/'+id+'/qr');if(!r.suc
 
 // 表单显隐控制（保留原有逻辑）
 function setVis(el,show){el.style.display=show?'':'none'}
-function tune(){const p=f_protocol.value,n=f_network.value;const isForward=p==='forward';if(p==='shadowsocks'||isForward){f_security.value='none';f_security.disabled=true;}else{f_security.disabled=false;}f_network.disabled=isForward;const s=f_security.value;const chainOn=fChainEnabled.value==='1';const chainType=fChainType.value;const sh={uuid:(p==='vless'||p==='vmess'),password:(p==='trojan'||p==='shadowsocks'),method:(p==='shadowsocks'),flow:(p==='vless'),ws:(!isForward&&n==='ws'),tls:(!isForward&&(s==='tls'||s==='reality')),reality:(!isForward&&s==='reality'),forward:isForward,chain:chainOn,chainAuth:chainOn&&(chainType==='socks5'||chainType==='http'),chainReality:chainOn&&chainType==='reality',chainSS:chainOn&&chainType==='shadowsocks'};document.querySelectorAll('[data-group]').forEach(el=>setVis(el,!!(sh[el.dataset.group] ?? sh[(el.dataset.group||"").replace("-","_")])))}
+function tune(){const p=f_protocol.value,n=f_network.value;const isForward=p==='forward';if(p==='shadowsocks'||isForward){f_security.value='none';f_security.disabled=true;}else{f_security.disabled=false;}f_network.disabled=isForward;const s=f_security.value;const chainOn=fChainEnabled.value==='1';const chainType=fChainType.value;const sh={uuid:(p==='vless'||p==='vmess'),password:(p==='trojan'||p==='shadowsocks'),method:(p==='shadowsocks'),flow:(p==='vless'),ws:(!isForward&&(n==='ws'||n==='xhttp')),tls:(!isForward&&(s==='tls'||s==='reality')),reality:(!isForward&&s==='reality'),forward:isForward,chain:chainOn,chainAuth:chainOn&&(chainType==='socks5'||chainType==='http'),chainReality:chainOn&&chainType==='reality',chainSS:chainOn&&chainType==='shadowsocks'};document.querySelectorAll('[data-group]').forEach(el=>setVis(el,!!(sh[el.dataset.group] ?? sh[(el.dataset.group||"").replace("-","_")])))}
 
 // 工具函数（保留原有逻辑）
 function genUUID(){f_uuid.value=(crypto.randomUUID?crypto.randomUUID():'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx').replace(/[xy]/g,c=>{const r=Math.random()*16|0,v=c==='x'?r:(r&0x3|0x8);return v.toString(16)})}

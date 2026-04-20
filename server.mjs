@@ -348,6 +348,7 @@ function buildInbound(form = {}) {
 
   const stream = { network, security };
   if (network === 'ws') stream.wsSettings = { path: form.path || '/', headers: { Host: form.host || '' } };
+  if (network === 'xhttp') stream.xhttpSettings = { path: form.path || '/', host: form.host || '', mode: form.xhttpMode || 'auto' };
   if (network === 'tcp') stream.tcpSettings = { acceptProxyProtocol: false, header: { type: 'none' } };
   if (security === 'tls') stream.tlsSettings = { serverName: form.sni || '', certificates: [] };
   if (security === 'reality') stream.realitySettings = { show: false, dest: form.realityDest || 'www.cloudflare.com:443', xver: 0, serverNames: [form.sni || 'www.cloudflare.com'], privateKey: form.privateKey || '', shortIds: [form.shortId || ''] };
@@ -1216,8 +1217,8 @@ function buildLinksForInbound(ib, reqHeaders = {}) {
   const sni = stream?.tlsSettings?.serverName || stream?.realitySettings?.serverNames?.[0] || 'www.cloudflare.com';
   const network = stream?.network || 'tcp';
   const security = stream?.security || 'none';
-  const pth = stream?.wsSettings?.path || '/';
-  const wsHost = stream?.wsSettings?.headers?.Host || host;
+  const pth = stream?.xhttpSettings?.path || stream?.wsSettings?.path || '/';
+  const wsHost = stream?.xhttpSettings?.host || stream?.wsSettings?.headers?.Host || host;
   let realityPbK = stream?.realitySettings?.settings?.publicKey || stream?.realitySettings?.publicKey || '';
   const realitySid = (stream?.realitySettings?.shortIds || [])[0] || '';
   if (security === 'reality' && !realityPbK) {
@@ -1236,7 +1237,7 @@ function buildLinksForInbound(ib, reqHeaders = {}) {
     if (protocol === 'vless') {
       const params = new URLSearchParams();
       params.set('type', network);
-      if (network === 'ws') { params.set('path', pth); params.set('host', wsHost); }
+      if (network === 'ws' || network === 'xhttp') { params.set('path', pth); params.set('host', wsHost); }
       if (security !== 'none') params.set('security', security);
       if (sni) params.set('sni', sni);
       if (security === 'reality') {
@@ -1247,12 +1248,12 @@ function buildLinksForInbound(ib, reqHeaders = {}) {
       } else if (c.flow) params.set('flow', c.flow);
       links.push(`vless://${c.id}@${host}:${ib.port}?${params.toString()}#${encodeURIComponent(ib.remark || email)}`);
     } else if (protocol === 'vmess') {
-      const obj = { v: '2', ps: ib.remark || email, add: host, port: String(ib.port), id: c.id, aid: String(c.alterId || 0), scy: 'auto', net: network, type: 'none', host: network === 'ws' ? wsHost : '', path: network === 'ws' ? pth : '', tls: security === 'none' ? '' : 'tls', sni };
+      const obj = { v: '2', ps: ib.remark || email, add: host, port: String(ib.port), id: c.id, aid: String(c.alterId || 0), scy: 'auto', net: network, type: 'none', host: (network === 'ws' || network === 'xhttp') ? wsHost : '', path: (network === 'ws' || network === 'xhttp') ? pth : '', tls: security === 'none' ? '' : 'tls', sni };
       links.push(`vmess://${b64(JSON.stringify(obj))}`);
     } else if (protocol === 'trojan') {
       const params = new URLSearchParams();
       params.set('type', network);
-      if (network === 'ws') { params.set('path', pth); params.set('host', wsHost); }
+      if (network === 'ws' || network === 'xhttp') { params.set('path', pth); params.set('host', wsHost); }
       if (security !== 'none') params.set('security', security);
       if (sni) params.set('sni', sni);
       links.push(`trojan://${encodeURIComponent(c.password)}@${host}:${ib.port}?${params.toString()}#${encodeURIComponent(ib.remark || email)}`);
