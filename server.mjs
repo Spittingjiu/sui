@@ -23,6 +23,8 @@ const XRAY_DIR = '/etc/sui-xray';
 const XRAY_CONFIG = path.join(XRAY_DIR, 'config.json');
 const XRAY_BIN = fs.existsSync('/usr/local/bin/xray') ? '/usr/local/bin/xray' : '/usr/local/x-ui/bin/xray-linux-amd64';
 const XRAY_SERVICE = 'sui-xray-core.service';
+const HY2_CERT_DIR = process.env.HY2_CERT_DIR || '/etc/sui-hy2';
+const HY2_DEFAULT_SNI = process.env.HY2_DEFAULT_SNI || 'www.bing.com';
 
 const sessions = new Map();
 let state = { seq: 1, inbounds: [] };
@@ -172,6 +174,34 @@ function mountPanelStatic() {
 
 function shell(cmd) {
   return execSync(cmd, { shell: '/bin/bash', stdio: 'pipe' }).toString().trim();
+}
+
+function isPrivateOrLoopbackHost(h = '') {
+  const v = String(h || '').trim().toLowerCase();
+  if (!v) return true;
+  if (v === 'localhost' || v === '127.0.0.1' || v === '::1' || v === '[::1]') return true;
+  if (/^10\./.test(v) || /^192\.168\./.test(v) || /^172\.(1[6-9]|2\d|3[0-1])\./.test(v) || /^127\./.test(v)) return true;
+  return false;
+}
+
+function detectPublicIPv4() {
+  try { return shell('curl -fsS --max-time 2 https://api.ipify.org'); } catch {}
+  try { return shell('curl -fsS --max-time 2 https://ifconfig.me'); } catch {}
+  try { return shell('curl -fsS --max-time 2 https://icanhazip.com').trim(); } catch {}
+  return '';
+}
+
+function ensureHy2SelfSignedCert(serverName = HY2_DEFAULT_SNI) {
+  const cn = String(serverName || HY2_DEFAULT_SNI).trim() || HY2_DEFAULT_SNI;
+  fs.mkdirSync(HY2_CERT_DIR, { recursive: true, mode: 0o755 });
+  const safe = cn.replace(/[^a-zA-Z0-9.-]+/g, '_');
+  const cert = path.join(HY2_CERT_DIR, `${safe}.crt`);
+  const key = path.join(HY2_CERT_DIR, `${safe}.key`);
+  if (!fs.existsSync(cert) || !fs.existsSync(key)) {
+    shell(`openssl req -x509 -nodes -newkey rsa:2048 -days 3650 -keyout ${shellQ(key)} -out ${shellQ(cert)} -subj ${shellQ(`/CN=${cn}`)} >/dev/null 2>&1`);
+    try { fs.chmodSync(key, 0o600); } catch {}
+  }
+  return { cert, key };
 }
 
 const SYSTEMCTL_DEDUP_MS = Number(process.env.SUI_SYSTEMCTL_DEDUP_MS || 1000);
@@ -351,16 +381,15 @@ function buildInbound(form = {}) {
   if (protocol === 'hysteria') {
     stream.network = 'hysteria';
     stream.security = 'tls';
+    const hy2Sni = String(form.sni || '').trim() || HY2_DEFAULT_SNI;
     const hy2CertFile = String(process.env.HY2_CERT_FILE || '').trim();
     const hy2KeyFile = String(process.env.HY2_KEY_FILE || '').trim();
-    const hy2TlsSettings = {
-      serverName: form.sni || '',
-      alpn: ['h3']
+    const certPair = (hy2CertFile && hy2KeyFile) ? { cert: hy2CertFile, key: hy2KeyFile } : ensureHy2SelfSignedCert(hy2Sni);
+    stream.tlsSettings = {
+      serverName: hy2Sni,
+      alpn: ['h3'],
+      certificates: [{ certificateFile: certPair.cert, keyFile: certPair.key }]
     };
-    if (hy2CertFile && hy2KeyFile) {
-      hy2TlsSettings.certificates = [{ certificateFile: hy2CertFile, keyFile: hy2KeyFile }];
-    }
-    stream.tlsSettings = hy2TlsSettings;
     stream.hysteriaSettings = {
       version: 2,
       auth: password,
@@ -1225,16 +1254,17 @@ function buildLinksForInbound(ib, reqHeaders = {}) {
   const settings = parseJ(ib.settings, {});
   const stream = parseJ(ib.streamSettings, {});
   const protocol = ib.protocol;
-  let host = XRAY_PUBLIC_HOST;
+  let host = String(XRAY_PUBLIC_HOST || '').trim();
   if (!host) {
     const rawHost = reqHeaders['x-forwarded-host'] || reqHeaders.host || '';
     host = String(rawHost).split(',')[0].trim().replace(/:\d+$/, '');
   }
-  if (!host) {
-    try { host = shell('curl -s4 ifconfig.me'); } catch {}
+  if (!host || isPrivateOrLoopbackHost(host)) {
+    const pub = detectPublicIPv4();
+    if (pub) host = pub;
   }
-  if (!host) host = 'jp.zzao.de';
-  const sni = protocol === 'hysteria' ? (stream?.tlsSettings?.serverName || '') : (stream?.tlsSettings?.serverName || stream?.realitySettings?.serverNames?.[0] || 'www.cloudflare.com');
+  if (!host) host = '127.0.0.1';
+  const sni = protocol === 'hysteria' ? (stream?.tlsSettings?.serverName || HY2_DEFAULT_SNI) : (stream?.tlsSettings?.serverName || stream?.realitySettings?.serverNames?.[0] || 'www.cloudflare.com');
   const network = stream?.network || 'tcp';
   const security = stream?.security || 'none';
   const pth = stream?.xhttpSettings?.path || stream?.wsSettings?.path || '/';
