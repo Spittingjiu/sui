@@ -345,12 +345,32 @@ function buildInbound(form = {}) {
   if (protocol === 'vmess') settings = { clients: [{ id: uuid, alterId: 0, email }], disableInsecureEncryption: false };
   if (protocol === 'trojan') settings = { clients: [{ password, email }], fallbacks: [] };
   if (protocol === 'shadowsocks') settings = { clients: [{ method, password, email }], network: 'tcp,udp' };
+  if (protocol === 'hysteria') settings = { version: 2, clients: [{ auth: password, email }] };
 
   const stream = { network, security };
+  if (protocol === 'hysteria') {
+    stream.network = 'hysteria';
+    stream.security = 'tls';
+    const hy2CertFile = String(process.env.HY2_CERT_FILE || '').trim();
+    const hy2KeyFile = String(process.env.HY2_KEY_FILE || '').trim();
+    const hy2TlsSettings = {
+      serverName: form.sni || '',
+      alpn: ['h3']
+    };
+    if (hy2CertFile && hy2KeyFile) {
+      hy2TlsSettings.certificates = [{ certificateFile: hy2CertFile, keyFile: hy2KeyFile }];
+    }
+    stream.tlsSettings = hy2TlsSettings;
+    stream.hysteriaSettings = {
+      version: 2,
+      auth: password,
+      udpIdleTimeout: Number(form.udpIdleTimeout || 60)
+    };
+  }
   if (network === 'ws') stream.wsSettings = { path: form.path || '/', headers: { Host: form.host || '' } };
   if (network === 'xhttp') stream.xhttpSettings = { path: form.path || '/', host: form.host || '', mode: form.xhttpMode || 'auto' };
   if (network === 'tcp') stream.tcpSettings = { acceptProxyProtocol: false, header: { type: 'none' } };
-  if (security === 'tls') stream.tlsSettings = { serverName: form.sni || '', certificates: [] };
+  if (security === 'tls' && protocol !== 'hysteria') stream.tlsSettings = { serverName: form.sni || '', certificates: [] };
   if (security === 'reality') stream.realitySettings = { show: false, dest: form.realityDest || 'www.cloudflare.com:443', xver: 0, serverNames: [form.sni || 'www.cloudflare.com'], privateKey: form.privateKey || '', shortIds: [form.shortId || ''] };
 
   return normalizeInbound({
@@ -1214,7 +1234,7 @@ function buildLinksForInbound(ib, reqHeaders = {}) {
     try { host = shell('curl -s4 ifconfig.me'); } catch {}
   }
   if (!host) host = 'jp.zzao.de';
-  const sni = stream?.tlsSettings?.serverName || stream?.realitySettings?.serverNames?.[0] || 'www.cloudflare.com';
+  const sni = protocol === 'hysteria' ? (stream?.tlsSettings?.serverName || '') : (stream?.tlsSettings?.serverName || stream?.realitySettings?.serverNames?.[0] || 'www.cloudflare.com');
   const network = stream?.network || 'tcp';
   const security = stream?.security || 'none';
   const pth = stream?.xhttpSettings?.path || stream?.wsSettings?.path || '/';
@@ -1261,6 +1281,13 @@ function buildLinksForInbound(ib, reqHeaders = {}) {
       const method = c.method || 'aes-128-gcm';
       const pwd = c.password || '';
       links.push(`ss://${b64u(`${method}:${pwd}`)}@${host}:${ib.port}#${encodeURIComponent(ib.remark || email)}`);
+    } else if (protocol === 'hysteria') {
+      const pwd = c.auth || c.password || settings.auth || stream?.hysteriaSettings?.auth || '';
+      const params = new URLSearchParams();
+      if (sni) params.set('sni', sni);
+      // hy2 实测默认走自签/临时证书场景更常见，默认关闭证书校验，避免开箱即连不上
+      params.set('insecure', '1');
+      links.push(`hy2://${encodeURIComponent(pwd)}@${host}:${ib.port}?${params.toString()}#${encodeURIComponent(ib.remark || email)}`);
     }
   }
   return links;
