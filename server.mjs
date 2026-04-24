@@ -358,6 +358,39 @@ function normalizeInbound(x = {}) {
   };
 }
 
+function normalizeHy2HopPorts(raw) {
+  const s = String(raw ?? '').trim();
+  if (!s) return '';
+  return s
+    .replace(/[\n\r;，\s]+/g, ',')
+    .replace(/,+/g, ',')
+    .replace(/^,|,$/g, '');
+}
+
+function normalizeHy2HopInterval(raw) {
+  const s = String(raw ?? '').trim();
+  if (!s) return '';
+  if (/^\d+$/.test(s)) {
+    const v = Number(s);
+    if (!Number.isFinite(v) || v < 5) return '';
+    return String(v);
+  }
+  const m = s.match(/^(\d+)\s*-\s*(\d+)$/);
+  if (!m) return '';
+  let a = Number(m[1]);
+  let b = Number(m[2]);
+  if (!Number.isFinite(a) || !Number.isFinite(b) || a < 5 || b < 5) return '';
+  if (a > b) [a, b] = [b, a];
+  return a === b ? String(a) : `${a}-${b}`;
+}
+
+function stringifyHy2HopPorts(raw) {
+  if (raw === undefined || raw === null) return '';
+  if (typeof raw === 'string' || typeof raw === 'number') return String(raw).trim();
+  if (Array.isArray(raw)) return raw.map(v => String(v).trim()).filter(Boolean).join(',');
+  return '';
+}
+
 function buildInbound(form = {}) {
   const protocol = String(form.protocol || 'vless');
   const port = Number(form.port || 0);
@@ -385,6 +418,8 @@ function buildInbound(form = {}) {
     const hy2CertFile = String(process.env.HY2_CERT_FILE || '').trim();
     const hy2KeyFile = String(process.env.HY2_KEY_FILE || '').trim();
     const certPair = (hy2CertFile && hy2KeyFile) ? { cert: hy2CertFile, key: hy2KeyFile } : ensureHy2SelfSignedCert(hy2Sni);
+    const hopPorts = normalizeHy2HopPorts(form.hy2HopPorts);
+    const hopInterval = normalizeHy2HopInterval(form.hy2HopInterval);
     stream.tlsSettings = {
       serverName: hy2Sni,
       alpn: ['h3'],
@@ -393,7 +428,8 @@ function buildInbound(form = {}) {
     stream.hysteriaSettings = {
       version: 2,
       auth: password,
-      udpIdleTimeout: Number(form.udpIdleTimeout || 60)
+      udpIdleTimeout: Number(form.udpIdleTimeout || 60),
+      ...(hopPorts ? { udphop: { ports: hopPorts, ...(hopInterval ? { interval: hopInterval } : {}) } } : {})
     };
   }
   if (network === 'ws') stream.wsSettings = { path: form.path || '/', headers: { Host: form.host || '' } };
@@ -1315,6 +1351,10 @@ function buildLinksForInbound(ib, reqHeaders = {}) {
       const pwd = c.auth || c.password || settings.auth || stream?.hysteriaSettings?.auth || '';
       const params = new URLSearchParams();
       if (sni) params.set('sni', sni);
+      const hopPorts = stringifyHy2HopPorts(stream?.hysteriaSettings?.udphop?.ports);
+      const hopInterval = normalizeHy2HopInterval(stream?.hysteriaSettings?.udphop?.interval);
+      if (hopPorts) params.set('mport', hopPorts);
+      if (hopInterval) params.set('mportInterval', hopInterval);
       // hy2 实测默认走自签/临时证书场景更常见，默认关闭证书校验，避免开箱即连不上
       params.set('insecure', '1');
       links.push(`hy2://${encodeURIComponent(pwd)}@${host}:${ib.port}?${params.toString()}#${encodeURIComponent(ib.remark || email)}`);
