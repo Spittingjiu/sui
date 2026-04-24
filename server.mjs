@@ -1167,6 +1167,23 @@ app.post('/api/system/restart-panel', async (_req, res) => {
   catch (e) { res.status(500).json({ success: false, msg: e.message }); }
 });
 
+app.post('/api/system/update-panel', async (_req, res) => {
+  try {
+    const panelDir = process.env.PANEL_APP_DIR || '/opt/sui-panel';
+    const before = shell(`bash -lc 'cd ${shellQ(panelDir)} && git rev-parse --short HEAD'`);
+    const branch = shell(`bash -lc 'cd ${shellQ(panelDir)} && (git rev-parse --abbrev-ref HEAD || echo main)'`);
+    shell(`bash -lc 'set -e; cd ${shellQ(panelDir)}; test -d .git; git fetch --all --prune; git pull --ff-only origin ${shellQ(branch)}'`);
+    const after = shell(`bash -lc 'cd ${shellQ(panelDir)} && git rev-parse --short HEAD'`);
+
+    runSystemctl('daemon-reload', { dedupKey: 'daemon-reload', dedupMs: 300, ignoreError: true });
+    runSystemctl(`restart ${PANEL_SERVICE}`, { dedupKey: `restart:${PANEL_SERVICE}`, dedupMs: 500 });
+
+    res.json({ success: true, msg: `panel updated: ${before} -> ${after}`, obj: { dir: panelDir, branch, before, after } });
+  } catch (e) {
+    res.status(500).json({ success: false, msg: e.message });
+  }
+});
+
 app.post('/api/system/chain/test', async (req, res) => {
   try {
     const host = String(req.body?.host || '').trim();

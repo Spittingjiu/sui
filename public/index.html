@@ -498,6 +498,7 @@
       <button onclick="loadData()"><i class="fa fa-refresh"></i> 刷新节点</button>
       <button onclick="openAdd()"><i class="fa fa-plus"></i> 新 增</button>
       <button onclick="quickReality()"><i class="fa fa-magic"></i> 一键 Reality</button>
+      <button onclick="updatePanel()"><i class="fa fa-cloud-download"></i> 更新面板</button>
       <button onclick="restartPanel()"><i class="fa fa-refresh"></i> 重启面板</button>
       <button onclick="restartXray()"><i class="fa fa-repeat"></i> 重启Xray</button>
       <span id="cv" class="badge"><i class="fa fa-cogs"></i> 当前 Xray:-</span>
@@ -793,6 +794,7 @@ async function submitAdd(){const proto=f_protocol.value;if(proto==='forward'){co
 // 一键 Reality（保留原有逻辑）
 function randomNodeName(){const a=['sunny','lucky','silver','gentle','swift','quiet','stellar','autumn','velvet','amber'];const b=['bridge','garden','harbor','forest','island','comet','breeze','valley','summit','oasis'];return `${a[Math.floor(Math.random()*a.length)]}-${b[Math.floor(Math.random()*b.length)]}`;}
 async function quickReality(){const def=randomNodeName();const finalName=def;const sni=sniPool[Math.floor(Math.random()*sniPool.length)];const r=await api('/api/inbounds/add-reality-quick',{method:'POST',body:JSON.stringify({remark:finalName,sni})});if(!r.success)return notify(r.msg||'创建一键 Reality失败','err');if(r.obj)upsertById(all,r.obj);await loadData();render();notify('节点新建成功')}
+async function updatePanel(){if(!confirm('确认更新面板？将执行 git pull 并自动重启面板服务。'))return;const r=await api('/api/system/update-panel',{method:'POST',body:'{}'});if(!r.success)return notify(r.msg||'更新面板失败','err');notify(r.msg||'面板更新成功');setTimeout(()=>location.reload(),1200)}
 async function restartPanel(){const r=await api('/api/system/restart-panel',{method:'POST',body:'{}'});if(!r.success)return notify(r.msg||'重启面板失败','err');notify('面板已重启');setTimeout(()=>location.reload(),900)}
 async function restartXray(){const r=await api('/api/system/restart-xray',{method:'POST',body:'{}'});if(!r.success)return notify(r.msg||'重启 Xray 失败','err');notify('Xray 已重启');await Promise.all([loadCur(),loadStatus()])}
 async function loadXrayConfig(){const r=await api('/api/system/xray/config');if(!r.success)return notify(r.msg||'读取配置失败','err');xrayConfigText.value=r.obj?.content||''}
