@@ -627,7 +627,13 @@ uninstall_sui(){
   rm -f /etc/systemd/system/sui-xray-core.service
   systemctl daemon-reload
 
-  rm -f /usr/local/bin/sui
+  rm -f /usr/local/bin/sui /usr/local/sbin/sui /usr/bin/sui
+  rm -f /opt/sui-panel/sui-menu.sh
+  rm -f /etc/profile.d/sui.sh /etc/profile.d/sui-menu.sh
+  # 清理可能残留的 shell 别名/函数注入
+  sed -i '/^[[:space:]]*alias[[:space:]]\+sui=/d' /root/.bashrc /etc/bash.bashrc /etc/profile 2>/dev/null || true
+  sed -i '/^[[:space:]]*sui()[[:space:]]*{/,+20d' /root/.bashrc /etc/bash.bashrc /etc/profile 2>/dev/null || true
+
   rm -f /etc/default/sui-panel
   rm -f /etc/sui-panel.mode
 
@@ -642,6 +648,7 @@ uninstall_sui(){
   fi
 
   echo "SUI 卸载完成"
+  echo "若当前 shell 仍能执行 sui，请执行：hash -r；再用 type sui 检查是否还有 alias/function 残留。"
 }
 
 while true; do
