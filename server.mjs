@@ -402,6 +402,13 @@ function buildInbound(form = {}) {
   const password = String(form.password || crypto.randomBytes(8).toString('hex'));
   const method = String(form.method || 'aes-128-gcm');
 
+  const parseBool = (v, d = false) => {
+    if (v === undefined || v === null || v === '') return d;
+    if (typeof v === 'boolean') return v;
+    const t = String(v).trim().toLowerCase();
+    return ['1', 'true', 'yes', 'on'].includes(t);
+  };
+
   let settings = {};
   const flow = (form.flow !== undefined && form.flow !== null) ? String(form.flow) : '';
   if (protocol === 'vless') settings = { clients: [{ id: uuid, email, flow }], decryption: 'none', fallbacks: [] };
@@ -420,9 +427,11 @@ function buildInbound(form = {}) {
     const certPair = (hy2CertFile && hy2KeyFile) ? { cert: hy2CertFile, key: hy2KeyFile } : ensureHy2SelfSignedCert(hy2Sni);
     const hopPorts = normalizeHy2HopPorts(form.hy2HopPorts);
     const hopInterval = normalizeHy2HopInterval(form.hy2HopInterval);
+    const alpn = String(form.alpn || '').split(',').map(x => x.trim()).filter(Boolean);
     stream.tlsSettings = {
       serverName: hy2Sni,
-      alpn: ['h3'],
+      alpn: alpn.length ? alpn : ['h3'],
+      allowInsecure: parseBool(form.allowInsecure, true),
       certificates: [{ certificateFile: certPair.cert, keyFile: certPair.key }]
     };
     stream.hysteriaSettings = {
@@ -431,6 +440,12 @@ function buildInbound(form = {}) {
       udpIdleTimeout: Number(form.udpIdleTimeout || 60),
       ...(hopPorts ? { udphop: { ports: hopPorts, ...(hopInterval ? { interval: hopInterval } : {}) } } : {})
     };
+    const obfsPassword = String(form.obfsPassword || '').trim();
+    if (obfsPassword) {
+      stream.finalmask = {
+        udp: [{ type: 'salamander', settings: { password: obfsPassword } }]
+      };
+    }
   }
   if (network === 'ws') stream.wsSettings = { path: form.path || '/', headers: { Host: form.host || '' } };
   if (network === 'xhttp') stream.xhttpSettings = { path: form.path || '/', host: form.host || '', mode: form.xhttpMode || 'auto' };
@@ -1367,13 +1382,24 @@ function buildLinksForInbound(ib, reqHeaders = {}) {
     } else if (protocol === 'hysteria') {
       const pwd = c.auth || c.password || settings.auth || stream?.hysteriaSettings?.auth || '';
       const params = new URLSearchParams();
+      params.set('security', 'tls');
       if (sni) params.set('sni', sni);
       const hopPorts = stringifyHy2HopPorts(stream?.hysteriaSettings?.udphop?.ports);
       const hopInterval = normalizeHy2HopInterval(stream?.hysteriaSettings?.udphop?.interval);
       if (hopPorts) params.set('mport', hopPorts);
       if (hopInterval) params.set('mportInterval', hopInterval);
-      // hy2 实测默认走自签/临时证书场景更常见，默认关闭证书校验，避免开箱即连不上
-      params.set('insecure', '1');
+      const alpn = stream?.tlsSettings?.alpn;
+      if (Array.isArray(alpn) && alpn.length) params.set('alpn', alpn.join(','));
+      if (stream?.tlsSettings?.allowInsecure !== false) params.set('insecure', '1');
+      const udpMasks = stream?.finalmask?.udp;
+      if (Array.isArray(udpMasks)) {
+        const salamander = udpMasks.find(m => m?.type === 'salamander');
+        const obfsPassword = salamander?.settings?.password;
+        if (typeof obfsPassword === 'string' && obfsPassword.length > 0) {
+          params.set('obfs', 'salamander');
+          params.set('obfs-password', obfsPassword);
+        }
+      }
       links.push(`hy2://${encodeURIComponent(pwd)}@${host}:${ib.port}?${params.toString()}#${encodeURIComponent(ib.remark || email)}`);
     }
   }
