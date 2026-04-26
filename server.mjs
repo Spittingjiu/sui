@@ -391,12 +391,27 @@ function stringifyHy2HopPorts(raw) {
   return '';
 }
 
+function mergeDeep(base, extra) {
+  const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v);
+  if (!isObj(base)) return isObj(extra) ? { ...extra } : extra;
+  if (!isObj(extra)) return base;
+  const out = { ...base };
+  for (const [k, v] of Object.entries(extra)) {
+    if (isObj(v) && isObj(out[k])) out[k] = mergeDeep(out[k], v);
+    else out[k] = v;
+  }
+  return out;
+}
+
 function buildInbound(form = {}) {
-  const protocol = String(form.protocol || 'vless');
+  let protocol = String(form.protocol || 'vless').toLowerCase();
+  if (protocol === 'ss') protocol = 'shadowsocks';
+  if (protocol === 'dokodemo') protocol = 'dokodemo-door';
+
   const port = Number(form.port || 0);
-  const remark = String(form.remark || protocol);
-  const network = String(form.network || 'tcp');
-  const security = String(form.security || 'none');
+  const remark = String(form.remark || protocol || 'node');
+  const network = String(form.network || 'tcp').toLowerCase();
+  const security = String(form.security || 'none').toLowerCase();
   const email = String(form.email || `${Date.now()}@xray.com`);
   const uuid = String(form.uuid || crypto.randomUUID());
   const password = String(form.password || crypto.randomBytes(8).toString('hex'));
@@ -408,17 +423,68 @@ function buildInbound(form = {}) {
     const t = String(v).trim().toLowerCase();
     return ['1', 'true', 'yes', 'on'].includes(t);
   };
+  const parseJSON = (v, d = {}) => {
+    if (v === undefined || v === null || v === '') return d;
+    if (typeof v === 'object') return v;
+    try { return JSON.parse(String(v)); } catch { return d; }
+  };
 
   let settings = {};
   const flow = (form.flow !== undefined && form.flow !== null) ? String(form.flow) : '';
-  if (protocol === 'vless') settings = { clients: [{ id: uuid, email, flow }], decryption: 'none', fallbacks: [] };
-  if (protocol === 'vmess') settings = { clients: [{ id: uuid, alterId: 0, email }], disableInsecureEncryption: false };
-  if (protocol === 'trojan') settings = { clients: [{ password, email }], fallbacks: [] };
-  if (protocol === 'shadowsocks') settings = { clients: [{ method, password, email }], network: 'tcp,udp' };
-  if (protocol === 'hysteria') settings = { version: 2, clients: [{ auth: password, email }] };
 
-  const stream = { network, security };
-  if (protocol === 'hysteria') {
+  if (protocol === 'vless') settings = { clients: [{ id: uuid, email, flow }], decryption: 'none', fallbacks: [] };
+  else if (protocol === 'vmess') settings = { clients: [{ id: uuid, alterId: 0, email }], disableInsecureEncryption: false };
+  else if (protocol === 'trojan') settings = { clients: [{ password, email }], fallbacks: [] };
+  else if (protocol === 'shadowsocks') settings = { clients: [{ method, password, email }], network: 'tcp,udp' };
+  else if (protocol === 'hysteria') settings = { version: 2, clients: [{ auth: password, email }] };
+  else if (protocol === 'socks') {
+    const auth = String(form.socksAuth || '').toLowerCase() === 'password' ? 'password' : 'noauth';
+    const u = String(form.socksUser || '').trim();
+    const p = String(form.socksPass || '');
+    settings = { auth, udp: true, ip: '127.0.0.1', userLevel: 0 };
+    if (auth === 'password') settings.accounts = [{ user: u, pass: p }];
+  } else if (protocol === 'http') {
+    const u = String(form.httpUser || '').trim();
+    const p = String(form.httpPass || '');
+    settings = { timeout: 300 };
+    if (u) settings.accounts = [{ user: u, pass: p }];
+  } else if (protocol === 'dokodemo-door') {
+    settings = {
+      address: String(form.dokodemoAddress || '1.1.1.1'),
+      port: Number(form.dokodemoPort || 443),
+      network: String(form.dokodemoNetwork || 'tcp,udp'),
+      followRedirect: parseBool(form.dokodemoFollowRedirect, false)
+    };
+  } else if (protocol === 'wireguard') {
+    const peers = Array.isArray(form.wireguardPeers) ? form.wireguardPeers : [
+      {
+        publicKey: String(form.wgPeerPublicKey || '').trim(),
+        endpoint: String(form.wgPeerEndpoint || '').trim(),
+        allowedIPs: String(form.wgPeerAllowedIPs || '0.0.0.0/0,::/0').split(',').map(s => s.trim()).filter(Boolean),
+        preSharedKey: String(form.wgPeerPreSharedKey || '').trim(),
+        keepAlive: Number(form.wgPeerKeepAlive || 0)
+      }
+    ];
+    settings = {
+      secretKey: String(form.wgSecretKey || '').trim(),
+      address: String(form.wgAddress || '10.0.0.2/32').split(',').map(s => s.trim()).filter(Boolean),
+      mtu: Number(form.wgMTU || 1420),
+      peers: peers.filter(x => x && x.publicKey)
+    };
+  } else if (protocol === 'tun') {
+    settings = {
+      name: String(form.tunName || 'tun0'),
+      mtu: Number(form.tunMTU || 1500),
+      stack: String(form.tunStack || 'system'),
+      autoRoute: parseBool(form.tunAutoRoute, true),
+      strictRoute: parseBool(form.tunStrictRoute, false)
+    };
+  }
+
+  let stream = { network, security };
+  if (['socks', 'http', 'dokodemo-door', 'wireguard', 'tun'].includes(protocol)) {
+    stream = {};
+  } else if (protocol === 'hysteria') {
     stream.network = 'hysteria';
     stream.security = 'tls';
     const hy2Sni = String(form.sni || '').trim() || HY2_DEFAULT_SNI;
@@ -446,12 +512,51 @@ function buildInbound(form = {}) {
         udp: [{ type: 'salamander', settings: { password: obfsPassword } }]
       };
     }
+  } else {
+    const safePath = String(form.path || '/');
+    const safeHost = String(form.host || '');
+    if (network === 'ws') stream.wsSettings = { path: safePath, headers: { Host: safeHost } };
+    if (network === 'xhttp') stream.xhttpSettings = { path: safePath, host: safeHost, mode: String(form.xhttpMode || 'auto') };
+    if (network === 'httpupgrade') stream.httpupgradeSettings = { path: safePath, host: safeHost };
+    if (network === 'grpc') stream.grpcSettings = { serviceName: String(form.grpcServiceName || safePath || '/').replace(/^\//, ''), authority: String(form.grpcAuthority || '') };
+    if (network === 'kcp') {
+      // Xray 26+ 已移除旧 mkcp header/seed 结构
+      stream.kcpSettings = {
+        mtu: Number(form.kcpMtu || 1350),
+        tti: Number(form.kcpTti || 50),
+        uplinkCapacity: Number(form.kcpUplinkCapacity || 5),
+        downlinkCapacity: Number(form.kcpDownlinkCapacity || 20),
+        congestion: parseBool(form.kcpCongestion, false),
+        readBufferSize: Number(form.kcpReadBufferSize || 2),
+        writeBufferSize: Number(form.kcpWriteBufferSize || 2)
+      };
+    }
+    if (network === 'tcp') stream.tcpSettings = { acceptProxyProtocol: false, header: { type: 'none' } };
+    if (security === 'tls') stream.tlsSettings = { serverName: form.sni || '', certificates: [] };
+    if (security === 'reality') {
+      let privateKey = String(form.privateKey || '').trim();
+      let publicKey = String(form.publicKey || '').trim();
+      if (!privateKey) {
+        try {
+          const out = shell(`${XRAY_BIN} x25519`);
+          privateKey = (out.match(/Private(?:\s*key|Key):\s*([^\n\r]+)/i) || [, ''])[1].trim();
+          if (!publicKey) publicKey = (out.match(/(?:Public\s*key|Password):\s*([^\n\r]+)/i) || [, ''])[1].trim();
+        } catch {}
+      }
+      stream.realitySettings = {
+        show: false,
+        dest: form.realityDest || 'www.cloudflare.com:443',
+        xver: 0,
+        serverNames: [form.sni || 'www.cloudflare.com'],
+        privateKey,
+        publicKey,
+        shortIds: [form.shortId || '']
+      };
+    }
   }
-  if (network === 'ws') stream.wsSettings = { path: form.path || '/', headers: { Host: form.host || '' } };
-  if (network === 'xhttp') stream.xhttpSettings = { path: form.path || '/', host: form.host || '', mode: form.xhttpMode || 'auto' };
-  if (network === 'tcp') stream.tcpSettings = { acceptProxyProtocol: false, header: { type: 'none' } };
-  if (security === 'tls' && protocol !== 'hysteria') stream.tlsSettings = { serverName: form.sni || '', certificates: [] };
-  if (security === 'reality') stream.realitySettings = { show: false, dest: form.realityDest || 'www.cloudflare.com:443', xver: 0, serverNames: [form.sni || 'www.cloudflare.com'], privateKey: form.privateKey || '', shortIds: [form.shortId || ''] };
+
+  settings = mergeDeep(settings, parseJSON(form.settingsOverride, {}));
+  stream = mergeDeep(stream, parseJSON(form.streamOverride, {}));
 
   return normalizeInbound({
     up: 0, down: 0, total: Number(form.total || 0), remark,

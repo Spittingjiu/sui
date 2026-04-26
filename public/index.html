@@ -595,13 +595,13 @@
   <div class="grid" style="margin-top:8px">
     <input id="f_remark" placeholder="备注" />
     <input id="f_port" placeholder="监听端口（主端口）" />
-    <select id="f_protocol"><option value="vless">vless</option><option value="vmess">vmess</option><option value="trojan">trojan</option><option value="shadowsocks">shadowsocks</option><option value="hysteria">hysteria2(hy2)</option><option value="forward">port-forward</option></select>
+    <select id="f_protocol"><option value="vless">vless</option><option value="vmess">vmess</option><option value="trojan">trojan</option><option value="shadowsocks">shadowsocks</option><option value="hysteria">hysteria2(hy2)</option><option value="socks">socks</option><option value="http">http</option><option value="dokodemo-door">dokodemo-door</option><option value="wireguard">wireguard</option><option value="tun">tun</option><option value="forward">port-forward</option></select>
 
     <select id="f_forward_protocol" data-group="forward" style="width:140px"><option value="tcp">转发类型 TCP</option><option value="udp">转发类型 UDP</option><option value="both">转发类型 TCP+UDP</option></select>
     <input id="f_forward_target_host" data-group="forward" placeholder="目标IP/域名" />
     <input id="f_forward_target_port" data-group="forward" placeholder="目标端口" />
 
-    <select id="f_network"><option>tcp</option><option>ws</option><option>xhttp</option></select>
+    <select id="f_network"><option>tcp</option><option>ws</option><option>xhttp</option><option>grpc</option><option>httpupgrade</option><option>kcp</option></select>
     <select id="f_security"><option>none</option><option>tls</option><option value="reality">reality</option></select>
     <input id="f_email" placeholder="email(tag)" />
 
@@ -778,8 +778,37 @@ async function showQR(id){const r=await api('/api/inbounds/'+id+'/qr');if(!r.suc
 
 // 表单显隐控制（保留原有逻辑）
 function setVis(el,show){el.style.display=show?'':'none'}
-function tune(){const p=f_protocol.value,n=f_network.value;const isForward=p==='forward';const isHy2=p==='hysteria';if(p==='shadowsocks'||isForward){f_security.value='none';f_security.disabled=true;}else if(isHy2){f_security.value='tls';f_security.disabled=true;}else{f_security.disabled=false;}if(isHy2){f_network.value='hysteria';if(!f_sni.value)f_sni.value='www.bing.com';f_port.placeholder='监听端口（主端口）';}else if(isForward){f_port.placeholder='监听端口';}else{f_port.placeholder='端口';}f_network.disabled=isForward||isHy2;const s=f_security.value;const chainOn=fChainEnabled.value==='1';const chainType=fChainType.value;const sh={uuid:(p==='vless'||p==='vmess'),password:(p==='trojan'||p==='shadowsocks'||p==='hysteria'),method:(p==='shadowsocks'),flow:(p==='vless'),ws:(!isForward&&!isHy2&&(n==='ws'||n==='xhttp')),tls:(!isForward&&(s==='tls'||s==='reality'||isHy2)),hy2hop:isHy2,reality:(!isForward&&s==='reality'&&!isHy2),forward:isForward,chain:chainOn,chainAuth:chainOn&&(chainType==='socks5'||chainType==='http'),chainReality:chainOn&&chainType==='reality',chainSS:chainOn&&chainType==='shadowsocks'};document.querySelectorAll('[data-group]').forEach(el=>setVis(el,!!(sh[el.dataset.group] ?? sh[(el.dataset.group||"").replace("-","_")]))) }
-function tune(){const p=f_protocol.value,n=f_network.value;const isForward=p==='forward';const isHy2=p==='hysteria';if(p==='shadowsocks'||isForward){f_security.value='none';f_security.disabled=true;}else if(isHy2){f_security.value='tls';f_security.disabled=true;}else{f_security.disabled=false;}if(isHy2){f_network.value='hysteria';if(!f_sni.value)f_sni.value='www.bing.com';}f_network.disabled=isForward||isHy2;const s=f_security.value;const chainOn=fChainEnabled.value==='1';const chainType=fChainType.value;const sh={uuid:(p==='vless'||p==='vmess'),password:(p==='trojan'||p==='shadowsocks'||p==='hysteria'),method:(p==='shadowsocks'),flow:(p==='vless'),ws:(!isForward&&!isHy2&&(n==='ws'||n==='xhttp')),tls:(!isForward&&(s==='tls'||s==='reality'||isHy2)),reality:(!isForward&&s==='reality'&&!isHy2),hy2:isHy2,forward:isForward,chain:chainOn,chainAuth:chainOn&&(chainType==='socks5'||chainType==='http'),chainReality:chainOn&&chainType==='reality',chainSS:chainOn&&chainType==='shadowsocks'};document.querySelectorAll('[data-group]').forEach(el=>setVis(el,!!(sh[el.dataset.group] ?? sh[(el.dataset.group||"").replace("-","_")]))) }
+function tune(){
+  const p=f_protocol.value,n=f_network.value;
+  const isForward=p==='forward';
+  const isHy2=p==='hysteria';
+  const isRaw=['socks','http','dokodemo-door','wireguard','tun'].includes(p);
+  if(p==='shadowsocks'||isForward||isRaw){f_security.value='none';f_security.disabled=true;}else if(isHy2){f_security.value='tls';f_security.disabled=true;}else{f_security.disabled=false;}
+  if(isHy2){f_network.value='hysteria';if(!f_sni.value)f_sni.value='www.bing.com';f_port.placeholder='监听端口（主端口）';}
+  else if(isForward){f_port.placeholder='监听端口';}
+  else{f_port.placeholder='端口';}
+  f_network.disabled=isForward||isHy2||isRaw;
+  const s=f_security.value;
+  const chainOn=fChainEnabled.value==='1';
+  const chainType=fChainType.value;
+  const sh={
+    uuid:(p==='vless'||p==='vmess'),
+    password:(p==='trojan'||p==='shadowsocks'||p==='hysteria'),
+    method:(p==='shadowsocks'),
+    flow:(p==='vless'),
+    ws:(!isForward&&!isHy2&&!isRaw&&(n==='ws'||n==='xhttp'||n==='grpc'||n==='httpupgrade'||n==='kcp')),
+    tls:(!isForward&&!isRaw&&(s==='tls'||s==='reality'||isHy2)),
+    hy2:(isHy2),
+    hy2hop:(isHy2),
+    reality:(!isForward&&!isHy2&&!isRaw&&s==='reality'),
+    forward:isForward,
+    chain:chainOn,
+    chainAuth:chainOn&&(chainType==='socks5'||chainType==='http'),
+    chainReality:chainOn&&chainType==='reality',
+    chainSS:chainOn&&chainType==='shadowsocks'
+  };
+  document.querySelectorAll('[data-group]').forEach(el=>setVis(el,!!(sh[el.dataset.group] ?? sh[(el.dataset.group||'').replace('-','_')])));
+}
 
 // 工具函数（保留原有逻辑）
 function genUUID(){f_uuid.value=(crypto.randomUUID?crypto.randomUUID():'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx').replace(/[xy]/g,c=>{const r=Math.random()*16|0,v=c==='x'?r:(r&0x3|0x8);return v.toString(16)})}
@@ -787,17 +816,79 @@ function randSni(){const s=sniPool[Math.floor(Math.random()*sniPool.length)];f_s
 async function genReality(){const r=await api('/api/system/xray/reality-gen');if(!r.success)return notify(r.msg||'生成 Reality 密钥失败','err');f_privateKey.value=r.obj.privateKey||'';f_publicKey.value=r.obj.publicKey||'';f_shortId.value=r.obj.shortId||'';if(!f_sni.value)randSni();if(!f_uuid.value)genUUID();if(!f_flow.value)f_flow.value='xtls-rprx-vision'}
 
 // 新增/编辑节点（保留原有逻辑）
-async function openAdd(){editId=null;editForwardId=null;mt.innerHTML='<i class="fa fa-plus-circle"></i> 新增节点';modal.classList.add('show');const p=await api('/api/inbounds/next-port');if(p.success)f_port.value=p.obj;fForwardProtocol.value='tcp';fForwardTargetHost.value='';fForwardTargetPort.value='';fHy2HopPorts.value='';fHy2HopInterval.value='';fChainEnabled.value='0';fChainType.value='socks5';fChainDomain.value='';fChainEnhance.value='1';fChainUdp443Policy.value='block';fChainHost.value='';fChainPort.value='';fChainUser.value='';fChainPass.value='';fChainUUID.value='';fChainServerName.value='';fChainPublicKey.value='';fChainShortId.value='';fChainFlow.value='';fChainSSMethod.value='aes-128-gcm';fChainSSPassword.value='';genUUID();tune()}
-function fill(n){if(n.protocol==='forward'){f_remark.value=n.remark||'';f_port.value=n.listenPort||'';f_protocol.value='forward';fForwardProtocol.value=n.protocol2||n.forwardProtocol||n.protocolMode||n.protocol||'tcp';fForwardTargetHost.value=n.targetHost||'';fForwardTargetPort.value=n.targetPort||'';tune();return;}const st=JSON.parse(n.settings||'{}'),ss=JSON.parse(n.streamSettings||'{}'),c=(st.clients||[])[0]||{};const ch=n.chain||{};const hy2Hop=ss?.hysteriaSettings?.udphop||{};f_remark.value=n.remark||'';f_port.value=n.port||'';f_protocol.value=n.protocol||'vless';f_network.value=ss.network||'tcp';f_security.value=ss.security||'none';f_email.value=c.email||'';f_uuid.value=c.id||'';f_password.value=(c.auth||c.password||st.auth||ss?.hysteriaSettings?.auth||'');f_method.value=c.method||'aes-128-gcm';f_flow.value=c.flow||'';f_path.value=ss.wsSettings?.path||'/';f_host.value=ss.wsSettings?.headers?.Host||'';f_sni.value=ss.tlsSettings?.serverName||ss.realitySettings?.serverNames?.[0]||'';fHy2HopPorts.value=(Array.isArray(hy2Hop.ports)?hy2Hop.ports.join(','):(hy2Hop.ports||''));fHy2HopInterval.value=(hy2Hop.interval||'');f_realityDest.value=ss.realitySettings?.dest||'';f_shortId.value=(ss.realitySettings?.shortIds||[])[0]||'';f_privateKey.value=ss.realitySettings?.privateKey||'';f_publicKey.value='';fChainEnabled.value=ch.enabled?'1':'0';fChainType.value=ch.type||'socks5';fChainDomain.value=ch.domainFilter||'';fChainEnhance.value=ch.enhanceDomainRouting===false?'0':'1';fChainUdp443Policy.value=ch.udp443Policy||'block';fChainHost.value=ch.host||'';fChainPort.value=ch.port||'';fChainUser.value=ch.user||'';fChainPass.value=ch.pass||'';fChainUUID.value=ch.uuid||'';fChainServerName.value=ch.serverName||'';fChainPublicKey.value=ch.publicKey||'';fChainShortId.value=ch.shortId||'';fChainFlow.value=ch.flow||'';fChainSSMethod.value=ch.method||'aes-128-gcm';fChainSSPassword.value=ch.password||'';tune()}
-async function openAdd(){editId=null;editForwardId=null;mt.innerHTML='<i class="fa fa-plus-circle"></i> 新增节点';modal.classList.add('show');const p=await api('/api/inbounds/next-port');if(p.success)f_port.value=p.obj;fForwardProtocol.value='tcp';fForwardTargetHost.value='';fForwardTargetPort.value='';fChainEnabled.value='0';fChainType.value='socks5';fHy2Alpn.value='h3';fHy2Insecure.value='1';fHy2ObfsPassword.value='';fChainDomain.value='';fChainEnhance.value='1';fChainUdp443Policy.value='block';fChainHost.value='';fChainPort.value='';fChainUser.value='';fChainPass.value='';fChainUUID.value='';fChainServerName.value='';fChainPublicKey.value='';fChainShortId.value='';fChainFlow.value='';fChainSSMethod.value='aes-128-gcm';fChainSSPassword.value='';genUUID();tune()}
-function fill(n){if(n.protocol==='forward'){f_remark.value=n.remark||'';f_port.value=n.listenPort||'';f_protocol.value='forward';fForwardProtocol.value=n.protocol2||n.forwardProtocol||n.protocolMode||n.protocol||'tcp';fForwardTargetHost.value=n.targetHost||'';fForwardTargetPort.value=n.targetPort||'';tune();return;}const st=JSON.parse(n.settings||'{}'),ss=JSON.parse(n.streamSettings||'{}'),c=(st.clients||[])[0]||{};const ch=n.chain||{};f_remark.value=n.remark||'';f_port.value=n.port||'';f_protocol.value=n.protocol||'vless';f_network.value=ss.network||'tcp';f_security.value=ss.security||'none';f_email.value=c.email||'';f_uuid.value=c.id||'';f_password.value=(c.auth||c.password||st.auth||ss?.hysteriaSettings?.auth||'');f_method.value=c.method||'aes-128-gcm';f_flow.value=c.flow||'';f_path.value=ss.wsSettings?.path||'/';f_host.value=ss.wsSettings?.headers?.Host||'';f_sni.value=ss.tlsSettings?.serverName||ss.realitySettings?.serverNames?.[0]||'';fHy2Alpn.value=(Array.isArray(ss.tlsSettings?.alpn)?ss.tlsSettings.alpn.join(','):'')||'h3';fHy2Insecure.value=(ss.tlsSettings?.allowInsecure===false)?'0':'1';fHy2ObfsPassword.value=(Array.isArray(ss.finalmask?.udp)?((ss.finalmask.udp.find(m=>m?.type==='salamander')||{}).settings||{}).password||'':'')||'';f_realityDest.value=ss.realitySettings?.dest||'';f_shortId.value=(ss.realitySettings?.shortIds||[])[0]||'';f_privateKey.value=ss.realitySettings?.privateKey||'';f_publicKey.value='';fChainEnabled.value=ch.enabled?'1':'0';fChainType.value=ch.type||'socks5';fChainDomain.value=ch.domainFilter||'';fChainEnhance.value=ch.enhanceDomainRouting===false?'0':'1';fChainUdp443Policy.value=ch.udp443Policy||'block';fChainHost.value=ch.host||'';fChainPort.value=ch.port||'';fChainUser.value=ch.user||'';fChainPass.value=ch.pass||'';fChainUUID.value=ch.uuid||'';fChainServerName.value=ch.serverName||'';fChainPublicKey.value=ch.publicKey||'';fChainShortId.value=ch.shortId||'';fChainFlow.value=ch.flow||'';fChainSSMethod.value=ch.method||'aes-128-gcm';fChainSSPassword.value=ch.password||'';tune()}
+async function openAdd(){
+  editId=null;editForwardId=null;mt.innerHTML='<i class="fa fa-plus-circle"></i> 新增节点';modal.classList.add('show');
+  const p=await api('/api/inbounds/next-port');if(p.success)f_port.value=p.obj;
+  fForwardProtocol.value='tcp';fForwardTargetHost.value='';fForwardTargetPort.value='';
+  fHy2HopPorts.value='';fHy2HopInterval.value='';fHy2Alpn.value='h3';fHy2Insecure.value='1';fHy2ObfsPassword.value='';
+  fChainEnabled.value='0';fChainType.value='socks5';fChainDomain.value='';fChainEnhance.value='1';fChainUdp443Policy.value='block';
+  fChainHost.value='';fChainPort.value='';fChainUser.value='';fChainPass.value='';
+  fChainUUID.value='';fChainServerName.value='';fChainPublicKey.value='';fChainShortId.value='';fChainFlow.value='';
+  fChainSSMethod.value='aes-128-gcm';fChainSSPassword.value='';
+  genUUID();tune();
+}
+function fill(n){
+  if(n.protocol==='forward'){
+    f_remark.value=n.remark||'';f_port.value=n.listenPort||'';f_protocol.value='forward';
+    fForwardProtocol.value=n.protocol2||n.forwardProtocol||n.protocolMode||n.protocol||'tcp';
+    fForwardTargetHost.value=n.targetHost||'';fForwardTargetPort.value=n.targetPort||'';tune();return;
+  }
+  const st=JSON.parse(n.settings||'{}'),ss=JSON.parse(n.streamSettings||'{}'),c=(st.clients||[])[0]||{},ch=n.chain||{};
+  const hy2Hop=ss?.hysteriaSettings?.udphop||{};
+  f_remark.value=n.remark||'';f_port.value=n.port||'';f_protocol.value=n.protocol||'vless';
+  f_network.value=ss.network||'tcp';f_security.value=ss.security||'none';f_email.value=c.email||'';f_uuid.value=c.id||'';
+  f_password.value=(c.auth||c.password||st.auth||ss?.hysteriaSettings?.auth||'');f_method.value=c.method||'aes-128-gcm';
+  f_flow.value=c.flow||'';
+  f_path.value=ss.wsSettings?.path||ss.xhttpSettings?.path||ss.httpupgradeSettings?.path||'/';
+  f_host.value=ss.wsSettings?.headers?.Host||ss.xhttpSettings?.host||ss.httpupgradeSettings?.host||'';
+  f_sni.value=ss.tlsSettings?.serverName||ss.realitySettings?.serverNames?.[0]||'';
+  fHy2HopPorts.value=(Array.isArray(hy2Hop.ports)?hy2Hop.ports.join(','):(hy2Hop.ports||''));
+  fHy2HopInterval.value=(hy2Hop.interval||'');
+  fHy2Alpn.value=(Array.isArray(ss.tlsSettings?.alpn)?ss.tlsSettings.alpn.join(','):'')||'h3';
+  fHy2Insecure.value=(ss.tlsSettings?.allowInsecure===false)?'0':'1';
+  fHy2ObfsPassword.value=(Array.isArray(ss.finalmask?.udp)?((ss.finalmask.udp.find(m=>m?.type==='salamander')||{}).settings||{}).password||'':'')||'';
+  f_realityDest.value=ss.realitySettings?.dest||'';f_shortId.value=(ss.realitySettings?.shortIds||[])[0]||'';
+  f_privateKey.value=ss.realitySettings?.privateKey||'';f_publicKey.value='';
+  fChainEnabled.value=ch.enabled?'1':'0';fChainType.value=ch.type||'socks5';fChainDomain.value=ch.domainFilter||'';
+  fChainEnhance.value=ch.enhanceDomainRouting===false?'0':'1';fChainUdp443Policy.value=ch.udp443Policy||'block';
+  fChainHost.value=ch.host||'';fChainPort.value=ch.port||'';fChainUser.value=ch.user||'';fChainPass.value=ch.pass||'';
+  fChainUUID.value=ch.uuid||'';fChainServerName.value=ch.serverName||'';fChainPublicKey.value=ch.publicKey||'';
+  fChainShortId.value=ch.shortId||'';fChainFlow.value=ch.flow||'';fChainSSMethod.value=ch.method||'aes-128-gcm';fChainSSPassword.value=ch.password||'';
+  tune();
+}
 async function openEdit(id){const n=all.find(x=>x.id===id);if(!n)return;editId=id;editForwardId=null;mt.innerHTML='<i class="fa fa-pencil"></i> 编辑节点';modal.classList.add('show');fill(n)}
 async function openEditForward(id){const n=(forwards||[]).find(x=>x.id===id);if(!n)return;editId=null;editForwardId=id;mt.innerHTML='<i class="fa fa-pencil"></i> 编辑端口转发';modal.classList.add('show');fill({...n,protocol:'forward',protocol2:n.protocol});}
 function closeM(){modal.classList.remove('show')}
 
 // 提交节点（保留原有逻辑）
-async function submitAdd(){const proto=f_protocol.value;if(proto==='forward'){const listenPort=Number(f_port.value||0),targetHost=(fForwardTargetHost.value||'').trim(),targetPort=Number(fForwardTargetPort.value||0),protocol=(fForwardProtocol.value||'tcp');if(!listenPort||!targetHost||!targetPort)return notify('请填写监听端口/目标IP/目标端口','err');const apiUrl=editForwardId?('/api/forwards/'+editForwardId):'/api/forwards';const apiMethod=editForwardId?'PUT':'POST';const fr=await api(apiUrl,{method:apiMethod,body:JSON.stringify({listenPort,targetHost,targetPort,protocol,remark:(f_remark.value||'')})});if(!fr.success)return notify(fr.msg||'端口转发保存失败','err');if(fr.obj)upsertById(forwards,fr.obj);closeM();await loadData();render();notify(protocol==='both'?'TCP+UDP 端口转发保存成功（单条）':'端口转发保存成功');return;}const chainEnabled=fChainEnabled.value==='1';const chain={enabled:chainEnabled,type:fChainType.value,host:(fChainHost.value||'').trim(),port:Number(fChainPort.value||0),domainFilter:(fChainDomain.value||'').trim(),enhanceDomainRouting:fChainEnhance.value==='1',udp443Policy:fChainUdp443Policy.value||'block',user:(fChainUser.value||'').trim(),pass:fChainPass.value||'',uuid:(fChainUUID.value||'').trim(),serverName:(fChainServerName.value||'').trim(),publicKey:(fChainPublicKey.value||'').trim(),shortId:(fChainShortId.value||'').trim(),flow:(fChainFlow.value||'').trim(),method:(fChainSSMethod.value||'').trim()||'aes-128-gcm',password:fChainSSPassword.value||''};if(chainEnabled&&(!chain.host||!chain.port))return notify('已开启链式代理，请填写下游 host/port','err');const hy2HopPorts=(fHy2HopPorts.value||'').trim();const hy2HopInterval=(fHy2HopInterval.value||'').trim();if(proto==='hysteria'&&hy2HopInterval){const m=hy2HopInterval.match(/^(\d+)(\s*-\s*(\d+))?$/);if(!m)return notify('hy2 跳跃间隔格式错误，应为 30 或 20-40','err');const a=Number(m[1]),b=Number(m[3]||m[1]);if(a<5||b<5)return notify('hy2 跳跃间隔需 >= 5 秒','err');}const b={remark:f_remark.value,port:f_port.value,protocol:proto,network:(proto==='hysteria'?'hysteria':f_network.value),security:(proto==='hysteria'?'tls':f_security.value),email:f_email.value,uuid:f_uuid.value,password:f_password.value,method:f_method.value,flow:f_flow.value,path:f_path.value,host:f_host.value,sni:(proto==='hysteria'?(f_sni.value||'www.bing.com'):f_sni.value),hy2HopPorts:(proto==='hysteria'?hy2HopPorts:''),hy2HopInterval:(proto==='hysteria'?hy2HopInterval:''),realityDest:f_realityDest.value,shortId:f_shortId.value,privateKey:f_privateKey.value,udpIdleTimeout:60,chain};const url=editId?('/api/inbounds/'+editId+'/full'):'/api/inbounds/add';const m=editId?'PUT':'POST';const r=await api(url,{method:m,body:JSON.stringify(b)});if(!r.success)return notify(r.msg||'操作失败','err');if(r.obj)upsertById(all,r.obj);closeM();await loadData();render();notify('节点保存成功')}
-async function submitAdd(){const proto=f_protocol.value;if(proto==='forward'){const listenPort=Number(f_port.value||0),targetHost=(fForwardTargetHost.value||'').trim(),targetPort=Number(fForwardTargetPort.value||0),protocol=(fForwardProtocol.value||'tcp');if(!listenPort||!targetHost||!targetPort)return notify('请填写监听端口/目标IP/目标端口','err');const apiUrl=editForwardId?('/api/forwards/'+editForwardId):'/api/forwards';const apiMethod=editForwardId?'PUT':'POST';const fr=await api(apiUrl,{method:apiMethod,body:JSON.stringify({listenPort,targetHost,targetPort,protocol,remark:(f_remark.value||'')})});if(!fr.success)return notify(fr.msg||'端口转发保存失败','err');if(fr.obj)upsertById(forwards,fr.obj);closeM();render();notify(protocol==='both'?'TCP+UDP 端口转发保存成功（单条）':'端口转发保存成功');return;}const chainEnabled=fChainEnabled.value==='1';const chain={enabled:chainEnabled,type:fChainType.value,host:(fChainHost.value||'').trim(),port:Number(fChainPort.value||0),domainFilter:(fChainDomain.value||'').trim(),enhanceDomainRouting:fChainEnhance.value==='1',udp443Policy:fChainUdp443Policy.value||'block',user:(fChainUser.value||'').trim(),pass:fChainPass.value||'',uuid:(fChainUUID.value||'').trim(),serverName:(fChainServerName.value||'').trim(),publicKey:(fChainPublicKey.value||'').trim(),shortId:(fChainShortId.value||'').trim(),flow:(fChainFlow.value||'').trim(),method:(fChainSSMethod.value||'').trim()||'aes-128-gcm',password:fChainSSPassword.value||''};if(chainEnabled&&(!chain.host||!chain.port))return notify('已开启链式代理，请填写下游 host/port','err');const b={remark:f_remark.value,port:f_port.value,protocol:proto,network:(proto==='hysteria'?'hysteria':f_network.value),security:(proto==='hysteria'?'tls':f_security.value),email:f_email.value,uuid:f_uuid.value,password:f_password.value,method:f_method.value,flow:f_flow.value,path:f_path.value,host:f_host.value,sni:(proto==='hysteria'?(f_sni.value||'www.bing.com'):f_sni.value),alpn:(proto==='hysteria'?(fHy2Alpn.value||'h3'):''),allowInsecure:(proto==='hysteria'?(fHy2Insecure.value==='1'):false),obfsPassword:(proto==='hysteria'?(fHy2ObfsPassword.value||''):''),realityDest:f_realityDest.value,shortId:f_shortId.value,privateKey:f_privateKey.value,udpIdleTimeout:60,chain};const url=editId?('/api/inbounds/'+editId+'/full'):'/api/inbounds/add';const m=editId?'PUT':'POST';const r=await api(url,{method:m,body:JSON.stringify(b)});if(!r.success)return notify(r.msg||'操作失败','err');if(r.obj)upsertById(all,r.obj);closeM();render();notify('节点保存成功')}
+async function submitAdd(){
+  const proto=f_protocol.value;
+  if(proto==='forward'){
+    const listenPort=Number(f_port.value||0),targetHost=(fForwardTargetHost.value||'').trim(),targetPort=Number(fForwardTargetPort.value||0),protocol=(fForwardProtocol.value||'tcp');
+    if(!listenPort||!targetHost||!targetPort)return notify('请填写监听端口/目标IP/目标端口','err');
+    const apiUrl=editForwardId?('/api/forwards/'+editForwardId):'/api/forwards';
+    const apiMethod=editForwardId?'PUT':'POST';
+    const fr=await api(apiUrl,{method:apiMethod,body:JSON.stringify({listenPort,targetHost,targetPort,protocol,remark:(f_remark.value||'')})});
+    if(!fr.success)return notify(fr.msg||'端口转发保存失败','err');
+    if(fr.obj)upsertById(forwards,fr.obj);closeM();await loadData();render();notify(protocol==='both'?'TCP+UDP 端口转发保存成功（单条）':'端口转发保存成功');
+    return;
+  }
+  const chainEnabled=fChainEnabled.value==='1';
+  const chain={enabled:chainEnabled,type:fChainType.value,host:(fChainHost.value||'').trim(),port:Number(fChainPort.value||0),domainFilter:(fChainDomain.value||'').trim(),enhanceDomainRouting:fChainEnhance.value==='1',udp443Policy:fChainUdp443Policy.value||'block',user:(fChainUser.value||'').trim(),pass:fChainPass.value||'',uuid:(fChainUUID.value||'').trim(),serverName:(fChainServerName.value||'').trim(),publicKey:(fChainPublicKey.value||'').trim(),shortId:(fChainShortId.value||'').trim(),flow:(fChainFlow.value||'').trim(),method:(fChainSSMethod.value||'').trim()||'aes-128-gcm',password:fChainSSPassword.value||''};
+  if(chainEnabled&&(!chain.host||!chain.port))return notify('已开启链式代理，请填写下游 host/port','err');
+  const hy2HopPorts=(fHy2HopPorts.value||'').trim();
+  const hy2HopInterval=(fHy2HopInterval.value||'').trim();
+  if(proto==='hysteria'&&hy2HopInterval){
+    const m=hy2HopInterval.match(/^(\d+)(\s*-\s*(\d+))?$/);if(!m)return notify('hy2 跳跃间隔格式错误，应为 30 或 20-40','err');
+    const a=Number(m[1]),b=Number(m[3]||m[1]);if(a<5||b<5)return notify('hy2 跳跃间隔需 >= 5 秒','err');
+  }
+  const b={remark:f_remark.value,port:f_port.value,protocol:proto,network:(proto==='hysteria'?'hysteria':f_network.value),security:(proto==='hysteria'?'tls':f_security.value),email:f_email.value,uuid:f_uuid.value,password:f_password.value,method:f_method.value,flow:f_flow.value,path:f_path.value,host:f_host.value,sni:(proto==='hysteria'?(f_sni.value||'www.bing.com'):f_sni.value),alpn:(proto==='hysteria'?(fHy2Alpn.value||'h3'):''),allowInsecure:(proto==='hysteria'?(fHy2Insecure.value==='1'):false),obfsPassword:(proto==='hysteria'?(fHy2ObfsPassword.value||''):''),hy2HopPorts:(proto==='hysteria'?hy2HopPorts:''),hy2HopInterval:(proto==='hysteria'?hy2HopInterval:''),realityDest:f_realityDest.value,shortId:f_shortId.value,privateKey:f_privateKey.value,udpIdleTimeout:60,chain};
+  const url=editId?('/api/inbounds/'+editId+'/full'):'/api/inbounds/add';
+  const m=editId?'PUT':'POST';
+  const r=await api(url,{method:m,body:JSON.stringify(b)});
+  if(!r.success)return notify(r.msg||'操作失败','err');
+  if(r.obj)upsertById(all,r.obj);closeM();await loadData();render();notify('节点保存成功');
+}
 
 // 一键 Reality（保留原有逻辑）
 function randomNodeName(){const a=['sunny','lucky','silver','gentle','swift','quiet','stellar','autumn','velvet','amber'];const b=['bridge','garden','harbor','forest','island','comet','breeze','valley','summit','oasis'];return `${a[Math.floor(Math.random()*a.length)]}-${b[Math.floor(Math.random()*b.length)]}`;}
