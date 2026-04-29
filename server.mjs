@@ -514,9 +514,8 @@ function buildInbound(form = {}) {
     }
     const obfsPassword = String(form.obfsPassword || '').trim();
     if (obfsPassword) {
-      stream.finalmask = {
-        udp: [{ type: 'salamander', settings: { password: obfsPassword } }]
-      };
+      stream.finalmask = stream.finalmask || {};
+      stream.finalmask.udp = [{ type: 'salamander', settings: { password: obfsPassword } }];
     }
   } else {
     const safePath = String(form.path || '/');
