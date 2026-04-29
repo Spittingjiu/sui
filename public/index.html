@@ -834,7 +834,7 @@ function fill(n){
     fForwardTargetHost.value=n.targetHost||'';fForwardTargetPort.value=n.targetPort||'';tune();return;
   }
   const st=JSON.parse(n.settings||'{}'),ss=JSON.parse(n.streamSettings||'{}'),c=(st.clients||[])[0]||{},ch=n.chain||{};
-  const hy2Hop=ss?.hysteriaSettings?.udphop||{};
+  const hy2Hop=ss?.finalmask?.quicParams?.udpHop||ss?.hysteriaSettings?.udphop||{};
   f_remark.value=n.remark||'';f_port.value=n.port||'';f_protocol.value=n.protocol||'vless';
   f_network.value=ss.network||'tcp';f_security.value=ss.security||'none';f_email.value=c.email||'';f_uuid.value=c.id||'';
   f_password.value=(c.auth||c.password||st.auth||ss?.hysteriaSettings?.auth||'');f_method.value=c.method||'aes-128-gcm';

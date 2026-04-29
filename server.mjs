@@ -503,9 +503,15 @@ function buildInbound(form = {}) {
     stream.hysteriaSettings = {
       version: 2,
       auth: password,
-      udpIdleTimeout: Number(form.udpIdleTimeout || 60),
-      ...(hopPorts ? { udphop: { ports: hopPorts, ...(hopInterval ? { interval: hopInterval } : {}) } } : {})
+      udpIdleTimeout: Number(form.udpIdleTimeout || 60)
     };
+    if (hopPorts) {
+      stream.finalmask = stream.finalmask || {};
+      stream.finalmask.quicParams = {
+        ...(stream.finalmask.quicParams || {}),
+        udpHop: { ports: hopPorts, ...(hopInterval ? { interval: hopInterval } : {}) }
+      };
+    }
     const obfsPassword = String(form.obfsPassword || '').trim();
     if (obfsPassword) {
       stream.finalmask = {
@@ -786,8 +792,59 @@ function restartXrayService() {
   catch { runSystemctl(`start ${XRAY_SERVICE}`, { dedupKey: `start:${XRAY_SERVICE}`, dedupMs: 500 }); }
 }
 
+function parseHy2HopRanges(raw = '') {
+  const out = [];
+  for (const part of String(raw || '').split(',')) {
+    const t = part.trim();
+    if (!t) continue;
+    const m = t.match(/^(\d{1,5})(?:-(\d{1,5}))?$/);
+    if (!m) continue;
+    const a = Number(m[1]);
+    const b = Number(m[2] || m[1]);
+    if (a < 1 || b < 1 || a > 65535 || b > 65535) continue;
+    const from = Math.min(a, b), to = Math.max(a, b);
+    out.push(from === to ? String(from) : `${from}-${to}`);
+  }
+  return [...new Set(out)];
+}
+
+function collectHy2UdpHopRedirects() {
+  const rules = [];
+  for (const ib of state.inbounds || []) {
+    if (!ib?.enable) continue;
+    if (String(ib.protocol || '').toLowerCase() !== 'hysteria') continue;
+    const mainPort = Number(ib.port || 0);
+    if (!mainPort || mainPort < 1 || mainPort > 65535) continue;
+    const stream = parseJ(ib.streamSettings, {});
+    const hop = stream?.finalmask?.quicParams?.udpHop || stream?.hysteriaSettings?.udphop || {};
+    for (const range of parseHy2HopRanges(hop?.ports)) {
+      // 不把主端口本身 redirect 到自己，避免无意义规则
+      if (range === String(mainPort)) continue;
+      rules.push({ range, mainPort });
+    }
+  }
+  return rules;
+}
+
+function syncHy2UdpHopNat() {
+  const redirects = collectHy2UdpHopRedirects();
+  try {
+    shell('nft delete table inet sui_hy2_nat >/dev/null 2>&1 || true');
+    if (!redirects.length) return;
+    shell('nft add table inet sui_hy2_nat');
+    shell(`nft add chain inet sui_hy2_nat prerouting ${shellQ('{ type nat hook prerouting priority dstnat; policy accept; }')}`);
+    for (const r of redirects) {
+      shell(`nft add rule inet sui_hy2_nat prerouting udp dport ${r.range} redirect to :${r.mainPort}`);
+    }
+  } catch (e) {
+    console.error('[hy2-udphop-nat] sync failed:', e?.message || e);
+  }
+}
+
+
 function applyAndRestart() {
   writeRenderedXrayConfigOnly();
+  syncHy2UdpHopNat();
   restartXrayService();
 }
 
@@ -805,6 +862,7 @@ function flushXrayApplyQueue() {
   xrayApplyLock = true;
   try {
     const changed = writeRenderedXrayConfigOnly().changed;
+    syncHy2UdpHopNat();
     if (!changed && !ops.some(x => x.type === 'restart')) {
       return;
     }
@@ -1489,8 +1547,9 @@ function buildLinksForInbound(ib, reqHeaders = {}) {
       const params = new URLSearchParams();
       params.set('security', 'tls');
       if (sni) params.set('sni', sni);
-      const hopPorts = stringifyHy2HopPorts(stream?.hysteriaSettings?.udphop?.ports);
-      const hopInterval = normalizeHy2HopInterval(stream?.hysteriaSettings?.udphop?.interval);
+      const udpHop = stream?.finalmask?.quicParams?.udpHop || stream?.hysteriaSettings?.udphop || {};
+      const hopPorts = stringifyHy2HopPorts(udpHop?.ports);
+      const hopInterval = normalizeHy2HopInterval(udpHop?.interval);
       if (hopPorts) params.set('mport', hopPorts);
       if (hopInterval) params.set('mportInterval', hopInterval);
       const alpn = stream?.tlsSettings?.alpn;
