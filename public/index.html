@@ -899,7 +899,17 @@ async function restartXray(){const r=await api('/api/system/restart-xray',{metho
 async function loadXrayConfig(){const r=await api('/api/system/xray/config');if(!r.success)return notify(r.msg||'读取配置失败','err');xrayConfigText.value=r.obj?.content||''}
 async function saveXrayConfig(){const content=(xrayConfigText.value||'').trim();if(!content)return notify('配置内容不能为空','err');const r=await api('/api/system/xray/config',{method:'POST',body:JSON.stringify({content})});if(!r.success)return notify(r.msg||'保存配置失败','err');notify(r.msg||'配置保存成功')}
 async function testChainConnectivity(){if(fChainEnabled.value!=='1')return notify('请先开启链式代理','err');const host=(fChainHost.value||'').trim();const port=Number(fChainPort.value||0);if(!host||!port)return notify('请先填写下游 host/port','err');const r=await api('/api/system/chain/test',{method:'POST',body:JSON.stringify({host,port})});notify(r.success?'下游连通性正常':(r.msg||'连通性失败'),r.success?'ok':'err')}
-function applyNodeSpeedPreset(){f_protocol.value='vless';f_network.value='tcp';f_security.value='reality';if(!f_flow.value)f_flow.value='xtls-rprx-vision';if(!f_sni.value)randSni();if(!f_realityDest.value&&f_sni.value)f_realityDest.value=f_sni.value+':443';if(!f_uuid.value)genUUID();tune();notify('已应用推荐参数')}
+function applyNodeSpeedPreset(){const proto=(f_protocol.value||'').toLowerCase();
+  if(proto==='hysteria'){f_network.value='hysteria';f_security.value='tls';if(!f_password.value)f_password.value=Math.random().toString(36).slice(2,14);if(!f_sni.value)f_sni.value='www.bing.com';if(!fHy2Alpn.value)fHy2Alpn.value='h3';if(!fHy2ObfsPassword.value)fHy2ObfsPassword.value='';fHy2Insecure.value='1';tune();notify('已应用 HY2 推荐参数');return;}
+  if(proto==='vless'){f_network.value='tcp';f_security.value='reality';if(!f_flow.value)f_flow.value='xtls-rprx-vision';if(!f_sni.value)randSni();if(!f_realityDest.value&&f_sni.value)f_realityDest.value=f_sni.value+':443';if(!f_uuid.value)genUUID();tune();notify('已应用 VLESS 推荐参数');return;}
+  if(proto==='vmess'){f_network.value='ws';f_security.value='tls';if(!f_uuid.value)genUUID();if(!f_path.value)f_path.value='/ws';if(!f_host.value&&f_sni.value)f_host.value=f_sni.value;if(!f_sni.value)f_sni.value='www.bing.com';tune();notify('已应用 VMESS 推荐参数');return;}
+  if(proto==='trojan'){f_network.value='tcp';f_security.value='tls';if(!f_password.value)f_password.value=Math.random().toString(36).slice(2,18);if(!f_sni.value)f_sni.value='www.bing.com';tune();notify('已应用 TROJAN 推荐参数');return;}
+  if(proto==='shadowsocks'){f_security.value='none';if(!f_method.value)f_method.value='2022-blake3-aes-128-gcm';if(!f_password.value)f_password.value=Math.random().toString(36).slice(2,20);tune();notify('已应用 SS 推荐参数');return;}
+  if(proto==='socks'){f_security.value='none';if(!f_password.value)f_password.value=Math.random().toString(36).slice(2,16);tune();notify('已应用 SOCKS 推荐参数');return;}
+  if(proto==='http'){f_security.value='none';if(!f_password.value)f_password.value=Math.random().toString(36).slice(2,16);tune();notify('已应用 HTTP 推荐参数');return;}
+  if(proto==='wireguard'){f_security.value='none';tune();notify('已应用 WireGuard 推荐参数');return;}
+  if(proto==='dokodemo-door'||proto==='tun'||proto==='forward'){tune();notify('该协议已应用基础推荐参数');return;}
+  tune();notify('已应用推荐参数');}
 
 // 加载引擎信息（保留原有逻辑）
 async function loadCur(){const r=await api('/api/system/xray/version-current');if(r.success){cv.textContent=`📜 当前 Xray: ${(r.obj.binary||'-')} / ${(r.obj.panel||'-')}`;return;}cv.textContent='📜 当前 Xray: 获取失败'}
@@ -955,6 +965,8 @@ async function init(){let __qTimer=null;q.oninput=()=>{clearTimeout(__qTimer);__
 
 // 页面启动逻辑（保留原有逻辑）
 (async()=>{if(localStorage.sessionToken){const me=await api('/auth/me');if(me.success){API_PREFIX=normPrefix(me.panelPath||'');forceReset=!!me.mustReset;login.style.display='none';app.style.display='block';init();if(forceReset){switchTab('settings');forceResetTip.style.display='block';}return;}localStorage.removeItem('sessionToken');}login.style.display='block';app.style.display='none';})();
+
+[lu,lp].forEach(el=>{if(!el)return;el.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();doLogin();}});});
 </script>
 </body>
 </html>
