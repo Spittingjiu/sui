@@ -5,665 +5,409 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>苏逸面板</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-  <!-- 引入字体图标增强古风视觉 -->
-  <link href="https://cdn.bootcdn.net/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css" rel="stylesheet">
   <style>
-    /* ========== 古风核心变量体系 ========== */
     :root{
-      /* 古风配色 - 宣纸/墨色/朱砂/青黛/木色 */
-      --bg-rice: #f5f0e6;        /* 宣纸底色 */
-      --bg-rice-dark: #e8e0d2;    /* 深宣纸色 */
-      --bg-ink: #12100e;         /* 墨黑色 */
-      --bg-wood: #8b5a2b;        /* 檀木色 */
-      --bg-wood-light: #a67c52;  /* 浅木色 */
-      --red-cinnabar: #c4302b;   /* 朱砂红 */
-      --red-cinnabar-light: #d94843; /* 浅朱砂红 */
-      --blue-indigo: #2a5b84;    /* 青黛色 */
-      --blue-indigo-light: #3a7ba8; /* 浅青黛色 */
-      --green-ink: #2e5c42;      /* 墨绿 */
-
-      /* 文字色 */
-      --text-ink: #23201d;       /* 墨色文字 */
-      --text-rice: #f5f0e6;      /* 宣纸色文字（深色背景用） */
-      --text-muted: #6b5b4b;     /* 浅墨色（次要文字） */
-      --text-success: #2e5c42;   /* 墨绿（成功状态） */
-      --text-danger: #c4302b;    /* 朱砂红（危险/停用） */
-
-      /* 边框/装饰色 */
-      --border-ink: #4a4035;     /* 墨色边框 */
-      --border-red: #c4302b88;   /* 朱红边框（半透） */
-      --border-blue: #2a5b8488;  /* 青黛边框（半透） */
-
-      /* 古风尺寸/圆角 - 仿古器物弧度 */
-      --radius-arch: 4px;        /* 仿古拱门圆角 */
-      --radius-seal: 2px;        /* 印章直角（微圆角） */
-      --radius-pearl: 8px;       /* 玉佩圆角 */
-
-      /* 阴影 - 水墨晕染效果 */
-      --shadow-ink: 0 4px 8px rgba(0, 0, 0, 0.3);   /* 重墨影 */
-      --shadow-light: 0 2px 6px rgba(0, 0, 0, 0.15);/* 浅墨影 */
-
-      /* 间距 */
-      --space-xs: 4px;
-      --space-sm: 8px;
-      --space-md: 12px;
-      --space-lg: 16px;
-      --space-xl: 20px;
+      --bg:#F5F5F7;
+      --surface:rgba(255,255,255,0.72);
+      --surface-solid:#ffffff;
+      --surface-2:rgba(0,0,0,0.04);
+      --text:#1D1D1F;
+      --muted:#86868B;
+      --blue:#1D1D1F;
+      --blue-hover:#000000;
+      --blue-soft:rgba(0,0,0,0.05);
+      --green:#34C759;
+      --green-soft:rgba(52,199,89,0.10);
+      --red:#FF3B30;
+      --red-hover:#E03228;
+      --red-soft:rgba(255,59,48,0.08);
+      --border:rgba(255,255,255,0.60);
+      --border-subtle:rgba(0,0,0,0.06);
+      --shadow-sm:0 2px 8px rgba(0,0,0,0.04);
+      --shadow-md:0 10px 40px rgba(0,0,0,0.04);
+      --shadow-lg:0 20px 60px rgba(0,0,0,0.06);
+      --shadow-glow:0 0 0 3px rgba(0,102,204,0.12);
+      --radius:16px;
+      --radius-control:10px;
+      --ease:cubic-bezier(0.25,0.8,0.25,1);
     }
 
-    /* ========== 全局重置与基础样式 ========== */
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
+    *{box-sizing:border-box;margin:0;padding:0}
+    html{background:var(--bg)}
+    body{
+      margin:0;
+      min-height:100vh;
+      background:var(--bg);
+      background-image:linear-gradient(160deg,#F5F5F7 0%,#E8E8ED 40%,#F0F0F5 100%);
+      color:var(--text);
+      font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",Arial,sans-serif;
+      font-size:14px;
+      line-height:1.5;
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+      text-rendering:optimizeLegibility;
     }
 
-    /* 古风背景 - 宣纸纹理 + 水墨渐变 */
-    body {
-      margin: 0;
-      background: linear-gradient(145deg, var(--bg-rice), var(--bg-rice-dark));
-      color: var(--text-ink);
-      /* 优先使用宋体/仿宋等古风字体 */
-      font-family: "SimSun", "STSong", "Noto Serif CJK SC", "Source Han Serif CN", serif;
-      font-size: 14px;
-      line-height: 1.6;
-      min-height: 100vh;
+    .wrap{
+      max-width:1180px;
+      margin:0 auto;
+      padding:40px 28px 60px;
     }
 
-    /* ========== 容器样式 - 仿古卷轴外框 ========== */
-    .wrap {
-      max-width: 1120px;
-      margin: 0 auto;
-      padding: var(--space-xl) var(--space-lg);
-      animation: fadeIn 0.6s ease-out;
-      position: relative;
-      background: var(--bg-rice);
-      border-left: 1px solid var(--border-ink);
-      border-right: 1px solid var(--border-ink);
-      box-shadow: var(--shadow-ink);
+    .card{
+      background:var(--surface);
+      backdrop-filter:blur(20px) saturate(180%);
+      -webkit-backdrop-filter:blur(20px) saturate(180%);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      padding:28px;
+      margin:0 0 20px;
+      box-shadow:var(--shadow-md);
+      transition:all .3s var(--ease);
+      animation:cardIn .5s var(--ease) both;
+    }
+    .card:hover{
+      box-shadow:var(--shadow-lg);
+      transform:translateY(-2px);
     }
 
-    /* 卷轴上下木轴装饰 */
-    .wrap::before, .wrap::after {
-      content: "";
-      position: absolute;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 90%;
-      height: 16px;
-      background: linear-gradient(to right, var(--bg-wood-light), var(--bg-wood), var(--bg-wood-light));
-      border: 1px solid var(--border-ink);
-      box-shadow: var(--shadow-ink);
-      z-index: 2;
+    @keyframes cardIn{
+      from{opacity:0;transform:translateY(15px)}
+      to{opacity:1;transform:translateY(0)}
+    }
+    .card:nth-child(2){animation-delay:.06s}
+    .card:nth-child(3){animation-delay:.12s}
+    .card:nth-child(4){animation-delay:.18s}
+
+    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    .grow{flex:1 1 auto;min-width:180px}
+
+    input,select,textarea{
+      appearance:none;
+      background:var(--surface-2);
+      color:var(--text);
+      border:1px solid transparent;
+      border-radius:var(--radius-control);
+      padding:11px 14px;
+      min-height:44px;
+      font:inherit;
+      font-size:14px;
+      outline:none;
+      transition:all .3s var(--ease);
+    }
+    select{
+      padding-right:32px;
+      background-image:url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%2386868B' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+      background-repeat:no-repeat;
+      background-position:right 12px center;
+    }
+    input:focus,select:focus,textarea:focus{
+      border-color:transparent;
+      background:rgba(0,0,0,0.03);
+      box-shadow:0 0 0 3px rgba(0,0,0,0.08);
+    }
+    input::placeholder,textarea::placeholder{color:#AEAEB2;font-weight:400}
+    textarea{min-height:96px;resize:vertical;line-height:1.6}
+
+    button{
+      border:0;
+      border-radius:var(--radius-control);
+      background:var(--blue);
+      color:#fff;
+      min-height:42px;
+      padding:10px 20px;
+      font:inherit;
+      font-weight:600;
+      font-size:14px;
+      letter-spacing:-.01em;
+      cursor:pointer;
+      box-shadow:0 2px 8px rgba(0,0,0,0.10);
+      text-shadow:none;
+      transition:all .3s var(--ease);
+      white-space:nowrap;
+    }
+    button:hover{
+      background:var(--blue-hover);
+      transform:scale(1.02);
+      box-shadow:0 4px 14px rgba(0,0,0,0.14);
+    }
+    button:active{
+      transform:scale(0.97);
+      box-shadow:0 1px 4px rgba(0,0,0,0.08);
+    }
+    button.danger,.danger{
+      background:var(--red);
+      box-shadow:0 2px 8px rgba(255,59,48,0.18);
+    }
+    button.danger:hover,.danger:hover{
+      background:var(--red-hover);
+      transform:scale(1.02);
+      box-shadow:0 4px 14px rgba(255,59,48,0.24);
     }
 
-    .wrap::before {
-      top: 0;
-      border-bottom: none;
-      border-radius: var(--radius-arch) var(--radius-arch) 0 0;
+    .badge{
+      display:inline-flex;
+      align-items:center;
+      min-height:28px;
+      padding:5px 12px;
+      border-radius:999px;
+      border:0;
+      background:var(--blue-soft);
+      color:var(--blue);
+      font-size:12px;
+      font-weight:600;
+      box-shadow:none;
+      backdrop-filter:blur(10px);
+      -webkit-backdrop-filter:blur(10px);
+    }
+    .badge{background:rgba(0,0,0,0.05);color:#1D1D1F;border:1px solid rgba(0,0,0,0.08)} .status-ok{
+      background:var(--green-soft)!important;
+      color:#1B8C3A!important;
+      border:1px solid rgba(52,199,89,0.15)!important;
+    }
+    .status-bad{
+      background:var(--red-soft)!important;
+      color:#D70015!important;
+      border:1px solid rgba(255,59,48,0.12)!important;
+    }
+    .muted{color:var(--muted);font-style:normal;font-size:13px;font-weight:400}
+    h2{
+      font-size:24px;
+      line-height:1.25;
+      font-weight:700;
+      letter-spacing:-.04em;
+      margin:0 0 24px;
+      color:var(--text);
+    }
+    b,strong{font-weight:600;color:var(--text)}
+
+    .tabs{
+      position:sticky;
+      top:0;
+      z-index:50;
+      margin:0 0 36px;
+      padding:14px 20px;
+      border-radius:0 0 20px 20px;
+      background:rgba(255,255,255,0.72);
+      backdrop-filter:saturate(200%) blur(24px);
+      -webkit-backdrop-filter:saturate(200%) blur(24px);
+      border:1px solid var(--border);
+      border-top:0;
+      box-shadow:0 4px 20px rgba(0,0,0,0.04);
+    }
+    .tabs b{
+      font-size:17px;
+      font-weight:700;
+      letter-spacing:-.03em;
+      margin-right:12px;
+    }
+    .tabs button{
+      position:relative;
+      background:transparent;
+      color:var(--muted);
+      border-radius:0;
+      padding:10px 8px;
+      min-height:40px;
+      font-weight:500;
+      font-size:14px;
+      box-shadow:none;
+    }
+    .tabs button:hover{
+      background:transparent;
+      color:var(--text);
+      transform:none;
+      box-shadow:none;
+    }
+    .tabs button.on{color:var(--blue);font-weight:600}
+    .tabs button.on::after{
+      content:"";
+      position:absolute;
+      left:8px;right:8px;bottom:2px;
+      height:3px;
+      border-radius:999px;
+      background:var(--blue);
+    }
+    .tabs .danger{
+      border-radius:999px;
+      background:transparent;
+      color:var(--red);
+      border:1px solid rgba(255,59,48,0.20);
+      font-weight:500;
+      box-shadow:none;
+    }
+    .tabs .danger:hover{
+      background:var(--red-soft);
+      transform:none;
+      box-shadow:none;
     }
 
-    .wrap::after {
-      bottom: 0;
-      border-top: none;
-      border-radius: 0 0 var(--radius-arch) var(--radius-arch);
+    .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+    .grid>div{min-width:0}
+    #list .card{padding:20px 24px}
+    #list .card .row:first-child{min-height:44px}
+    #list .card:hover{background:rgba(255,255,255,0.88)}
+
+    .m{
+      position:fixed;
+      inset:0;
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding:24px;
+      background:rgba(0,0,0,0.32);
+      backdrop-filter:blur(12px) saturate(150%);
+      -webkit-backdrop-filter:blur(12px) saturate(150%);
+      z-index:1000;
+    }
+    .m.show{display:flex;animation:fadeIn .2s var(--ease)}
+    .box{
+      width:min(980px,95vw);
+      max-height:90vh;
+      overflow:auto;
+      background:rgba(255,255,255,0.92);
+      backdrop-filter:blur(30px) saturate(180%);
+      -webkit-backdrop-filter:blur(30px) saturate(180%);
+      border:1px solid var(--border);
+      border-radius:22px;
+      padding:28px;
+      box-shadow:0 24px 80px rgba(0,0,0,0.12);
+      animation:modalIn .3s var(--ease);
+    }
+    @keyframes modalIn{
+      from{opacity:0;transform:scale(0.95) translateY(10px)}
+      to{opacity:1;transform:scale(1) translateY(0)}
     }
 
-    /* ========== 古风卡片 - 仿屏风/卷轴内芯 ========== */
-    .card {
-      background: var(--bg-rice);
-      border: 1px solid var(--border-ink);
-      border-radius: var(--radius-arch);
-      padding: var(--space-lg);
-      margin: var(--space-lg) 0;
-      box-shadow: var(--shadow-ink);
-      position: relative;
-      overflow: hidden;
-      transition: all 0.4s ease;
+    #login{
+      min-height:100vh;
+      display:flex!important;
+      justify-content:center!important;
+      align-items:center!important;
+      padding:24px;
+      max-width:none!important;
+      width:100%!important;
+      margin:0!important;
+    }
+    #login .card{
+      width:min(420px,100%);
+      margin:0;
+      padding:40px 36px;
+      box-shadow:0 20px 60px rgba(0,0,0,0.08);
+      border-radius:22px;
+      animation:loginIn .6s var(--ease) both;
+    }
+    @keyframes loginIn{
+      from{opacity:0;transform:translateY(24px) scale(0.97)}
+      to{opacity:1;transform:translateY(0) scale(1)}
+    }
+    #login h2{text-align:center;font-size:26px;margin-bottom:32px;font-weight:700;letter-spacing:-.04em}
+    #le{min-height:20px;color:var(--red);text-align:center;font-size:13px}
+
+    #qrImg{
+      display:block;
+      max-width:320px;
+      width:100%;
+      background:#fff;
+      padding:10px;
+      border-radius:14px;
+      margin:18px auto;
+      box-shadow:var(--shadow-md);
+    }
+    #xrayConfigText{
+      font-family:"SF Mono","Menlo","Monaco","Consolas",monospace;
+      font-size:13px;
     }
 
-    /* 卡片仿古虚线边框装饰（仿宣纸装裱） */
-    .card::before {
-      content: "";
-      position: absolute;
-      top: 8px;
-      left: 8px;
-      right: 8px;
-      bottom: 8px;
-      border: 1px dashed var(--border-ink);
-      pointer-events: none;
-      opacity: 0.3;
-      transition: opacity 0.3s ease;
+    .toast-wrap{
+      position:fixed;
+      right:20px;
+      top:20px;
+      z-index:99999;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
     }
-
-    .card:hover {
-      transform: translateY(-4px);
-      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
-      border-color: var(--blue-indigo);
+    .toast{
+      position:relative;
+      overflow:hidden;
+      background:rgba(255,255,255,0.82);
+      backdrop-filter:saturate(200%) blur(24px);
+      -webkit-backdrop-filter:saturate(200%) blur(24px);
+      border:1px solid var(--border);
+      color:var(--text);
+      padding:14px 16px 14px 20px;
+      border-radius:14px;
+      box-shadow:0 8px 32px rgba(0,0,0,0.10);
+      font-size:13px;
+      max-width:360px;
+      opacity:.98;
+      animation:toastIn .3s var(--ease);
     }
-
-    .card:hover::before {
-      opacity: 0.6;
-      border-color: var(--blue-indigo);
+    @keyframes toastIn{
+      from{opacity:0;transform:translateX(20px)}
+      to{opacity:1;transform:translateX(0)}
     }
+    .toast::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--green);border-radius:4px 0 0 4px}
+    .toast.err::before{background:var(--red)}
 
-    /* ========== 行布局 ========== */
-    .row {
-      display: flex;
-      gap: var(--space-md);
-      align-items: center;
-      flex-wrap: wrap;
+    i.fa{display:inline-flex;align-items:center;justify-content:center;width:1.05em;margin-right:.35em;font-style:normal;font-family:inherit}
+    i.fa::before{content:""}
+    i.fa-toggle-on::before{content:"⏻"}
+    i.fa-pencil::before{content:"✎"}
+    i.fa-copy::before{content:"⧉"}
+    i.fa-qrcode::before{content:"▦"}
+    i.fa-trash::before{content:"⌫"}
+    i.fa-plus-circle::before{content:"＋"}
+
+    @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+
+
+    /* Node list action buttons - compact */
+    #list .row:last-child button{
+      min-height:32px;
+      padding:6px 12px;
+      font-size:12px;
+      font-weight:500;
+      border-radius:8px;
     }
-
-    .grow {
-      flex: 1;
+    #list .row:last-child button.danger{
+      min-height:32px;
+      padding:6px 12px;
     }
-
-    /* ========== 古风表单控件 - 仿竹简/宣纸输入框 ========== */
-    input, select, textarea {
-      background: var(--bg-rice);
-      color: var(--text-ink);
-      border: 1px solid var(--border-ink);
-      border-radius: var(--radius-seal);
-      padding: 10px 12px;
-      font-family: inherit;
-      font-size: 14px;
-      transition: all 0.3s ease;
-      box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
-    }
-
-    input:focus, select:focus, textarea:focus {
-      outline: none;
-      border-color: var(--blue-indigo);
-      box-shadow: 0 0 0 2px rgba(42, 91, 132, 0.2);
-    }
-
-    input::placeholder, textarea::placeholder {
-      color: var(--text-muted);
-      opacity: 0.7;
-      font-style: italic;
-    }
-
-    textarea {
-      min-height: 72px;
-      resize: vertical;
-      line-height: 1.8;
-    }
-
-    /* ========== 古风按钮 - 仿印章/玉佩样式 ========== */
-    button {
-      background: linear-gradient(to bottom, var(--blue-indigo-light), var(--blue-indigo));
-      color: var(--text-rice);
-      border: 1px solid var(--border-ink);
-      border-radius: var(--radius-seal);
-      padding: 10px 16px;
-      font-family: inherit;
-      font-size: 14px;
-      font-weight: bold;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      box-shadow: var(--shadow-light);
-      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-    }
-
-    button:hover {
-      background: linear-gradient(to bottom, var(--blue-indigo), var(--blue-indigo-light));
-      transform: translateY(-2px);
-      box-shadow: var(--shadow-ink);
-      border-color: var(--bg-ink);
-    }
-
-    button:active {
-      transform: translateY(0);
-      box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
-    }
-
-    /* 危险按钮 - 朱砂红（仿朱批） */
-    .danger {
-      background: linear-gradient(to bottom, var(--red-cinnabar-light), var(--red-cinnabar));
-    }
-
-    .danger:hover {
-      background: linear-gradient(to bottom, var(--red-cinnabar), var(--red-cinnabar-light));
-    }
-
-    /* ========== 古风徽章 - 仿腰牌/令牌 ========== */
-    .badge {
-      padding: 4px 10px;
-      border-radius: var(--radius-seal);
-      border: 1px solid var(--border-ink);
-      background: var(--bg-rice);
-      font-size: 12px;
-      font-weight: bold;
-      transition: all 0.2s ease;
-      box-shadow: var(--shadow-light);
-    }
-
-    .status-ok {
-      border-color: var(--green-ink)!important;
-      color: var(--text-success)!important;
-      background: rgba(46, 92, 66, 0.1);
-    }
-
-    .status-bad {
-      border-color: var(--red-cinnabar)!important;
-      color: var(--text-danger)!important;
-      background: rgba(196, 48, 43, 0.1);
-    }
-
-    /* ========== 文字样式 ========== */
-    .muted {
-      color: var(--text-muted);
-      font-style: italic;
-    }
-
-    h2, b, strong {
-      color: var(--bg-ink);
-      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-    }
-
-    h2 {
-      border-bottom: 1px solid var(--border-ink);
-      padding-bottom: 8px;
-      margin-bottom: 16px;
-      position: relative;
-    }
-
-    /* 标题下的朱砂点装饰 */
-    h2::after {
-      content: "";
-      position: absolute;
-      bottom: -1px;
-      left: 0;
-      width: 30px;
-      height: 1px;
-      background: var(--red-cinnabar);
-    }
-
-    /* ========== 古风标签页 - 仿书册分页 ========== */
-    .tabs button {
-      opacity: .75;
-      background: var(--bg-rice);
-      color: var(--text-ink);
-      border: 1px solid var(--border-ink);
-      padding: 8px 16px;
-      text-shadow: none;
-    }
-
-    .tabs button.on {
-      opacity: 1;
-      border-color: var(--blue-indigo);
-      background: rgba(42, 91, 132, 0.1);
-    }
-
-    .tabs button:hover {
-      opacity: 1;
-      background: rgba(42, 91, 132, 0.05);
-      box-shadow: var(--shadow-light);
-    }
-
-    .tabs b {
-      font-size: 18px;
-      padding-right: var(--space-md);
-      font-family: "KaiTi", "STKaiti", cursive; /* 标题用楷体增强古风 */
-    }
-
-    /* ========== 网格布局 ========== */
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: var(--space-md);
-    }
-
-    /* ========== 古风模态框 - 仿开窗/屏风 ========== */
-    .m {
-      position: fixed;
-      inset: 0;
-      background: rgba(18, 16, 14, 0.8);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      transition: opacity 0.2s ease;
-      z-index: 1000;
-      backdrop-filter: blur(2px);
-    }
-
-    .m.show {
-      display: flex;
-      animation: fadeIn 0.3s ease;
-    }
-
-    .box {
-      width: min(980px, 95vw);
-      max-height: 90vh;
-      overflow: auto;
-      background: var(--bg-rice);
-      border: 2px solid var(--border-ink);
-      border-radius: var(--radius-arch);
-      padding: var(--space-lg);
-      animation: popIn 0.3s ease;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
-      position: relative;
-    }
-
-    /* 模态框仿古角花装饰 */
-    .box::before, .box::after, .box div:first-child::before, .box div:first-child::after {
-      content: "";
-      position: absolute;
-      width: 20px;
-      height: 20px;
-      border: 2px solid var(--border-ink);
-      opacity: 0.6;
-      z-index: 1;
-    }
-
-    .box::before {
-      top: 10px;
-      left: 10px;
-      border-right: none;
-      border-bottom: none;
-    }
-
-    .box::after {
-      top: 10px;
-      right: 10px;
-      border-left: none;
-      border-bottom: none;
-    }
-
-    .box div:first-child::before {
-      bottom: 10px;
-      left: 10px;
-      border-right: none;
-      border-top: none;
-    }
-
-    .box div:first-child::after {
-      bottom: 10px;
-      right: 10px;
-      border-left: none;
-      border-top: none;
-    }
-
-    /* ========== 登录卡片特殊样式 ========== */
-    #login .card {
-      max-width: 420px;
-      margin: 12vh auto;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-      border-width: 2px;
-    }
-
-    #login h2 {
-      font-size: 28px;
-      text-align: center;
-      font-family: "KaiTi", "STKaiti", cursive;
-    }
-
-    #le {
-      min-height: 18px;
-      color: var(--text-danger);
-      text-align: center;
-    }
-
-    /* ========== 二维码模态框优化 ========== */
-    #qrImg {
-      max-width: 320px;
-      width: 100%;
-      background: #fff;
-      padding: var(--space-sm);
-      border: 1px solid var(--border-ink);
-      border-radius: var(--radius-arch);
-      margin: var(--space-md) 0;
-      box-shadow: var(--shadow-ink);
-    }
-
-    /* ========== 动画效果（古风缓动） ========== */
-    @keyframes fadeIn {
-      from { opacity: 0; }
-      to { opacity: 1; }
-    }
-
-    @keyframes popIn {
-      from { opacity: .35; transform: translateY(10px) scale(0.98); }
-      to { opacity: 1; transform: translateY(0) scale(1); }
-    }
-
-    /* ========== 响应式适配（移动端古风兼容） ========== */
-    @media (max-width: 860px) {
-      .grid {
-        grid-template-columns: 1fr;
+    /* Suppress card animation on auto-refresh to prevent flash */
+    #list .card{animation:none}
+    @media (max-width:860px){
+      .wrap{padding:20px 14px 100px}
+      .grid{grid-template-columns:1fr;gap:12px}
+      .card{padding:20px;margin-bottom:16px;border-radius:14px}
+      .tabs{
+        position:sticky;
+        top:0;
+        overflow-x:auto;
+        flex-wrap:nowrap;
+        gap:16px;
+        padding:12px 14px;
+        margin-left:-14px;
+        margin-right:-14px;
+        border-radius:0;
+        scrollbar-width:none;
       }
-
-      .row {
-        gap: var(--space-sm);
-      }
-
-      button {
-        padding: 8px 10px;
-        font-size: 13px;
-      }
-
-      .wrap {
-        padding: var(--space-md);
-      }
-
-      .card {
-        padding: var(--space-md);
-      }
-
-      .tabs button {
-        padding: 6px 12px;
-      }
-
-      /* 移动端简化卷轴装饰 */
-      .wrap::before, .wrap::after {
-        width: 80%;
-        height: 12px;
-      }
+      .tabs::-webkit-scrollbar{display:none}
+      .tabs b,.tabs .grow{flex:0 0 auto}
+      .tabs button{flex:0 0 auto;font-size:13px}
+      input,select,textarea,.grow{width:100%;min-width:0}
+      .row{gap:10px}
+      button{padding:10px 14px;font-size:13px}
+      .m{padding:12px;align-items:flex-end}
+      .box{width:100%;max-height:88vh;border-radius:20px 20px 0 0;padding:20px}
+      .toast-wrap{left:12px;right:12px;top:12px}
+      .toast{max-width:none}
     }
-
-.toast-wrap{position:fixed;right:16px;top:16px;z-index:99999;display:flex;flex-direction:column;gap:8px}
-.toast{background:#12213f;border:1px solid #345ea8;color:#eaf1ff;padding:10px 12px;border-radius:10px;box-shadow:0 8px 20px rgba(0,0,0,.35);font-size:13px;max-width:340px;opacity:.98}
-.toast.ok{border-color:#2f7d4a}
-.toast.err{border-color:#8a2f46}
-
-</style>
+    body>#login.wrap{max-width:none!important;width:100%!important;display:flex!important;justify-content:center!important;align-items:center!important;margin:0!important}
+    body>#login>.card{margin:0!important}
+  </style>
 </head>
-<body>
-<div id="login" class="wrap">
-  <div class="card">
-    <h2><i class="fa fa-lock"></i> 苏逸面板 · 登录</h2>
-    <div class="muted" style="margin-bottom:10px;text-align:center">古风雅韵 · 稳定运维</div>
-    <input id="lu" placeholder="请输入用户名" style="width:100%" />
-    <input id="lp" type="password" placeholder="请输入密码" style="width:100%;margin-top:8px" />
-    <button style="width:100%;margin-top:10px" onclick="doLogin()"><i class="fa fa-sign-in"></i> 登 录</button>
-    <div id="le" style="margin-top:8px"></div>
-  </div>
-</div>
-
-<div id="app" class="wrap" style="display:none">
-  <div class="card row tabs">
-    <b><i class="fa fa-pagelines"></i> 苏逸面板</b>
-    <button id="tabMainBtn" class="on" onclick="switchTab('main')"><i class="fa fa-th"></i> 节点管理</button>
-    <button id="tabSettingsBtn" onclick="switchTab('settings')"><i class="fa fa-cog"></i> 面板设置</button>
-    <button id="tabXrayBtn" onclick="switchTab('xray')"><i class="fa fa-file-text-o"></i> Xray管理</button>
-    <button id="tabTokenBtn" onclick="switchTab('token')"><i class="fa fa-plug"></i> 对接Token</button>
-    <span class="grow"></span>
-    <button class="danger" onclick="logout()"><i class="fa fa-sign-out"></i> 退 出</button>
-  </div>
-
-  <div id="tab-main">
-    <div class="card row">
-      <input id="q" class="grow" placeholder="搜索备注 / 端口 / 协议" />
-      <button onclick="loadData()"><i class="fa fa-refresh"></i> 刷新节点</button>
-      <button onclick="openAdd()"><i class="fa fa-plus"></i> 新 增</button>
-      <button onclick="quickReality()"><i class="fa fa-magic"></i> 一键 Reality</button>
-      <button onclick="updatePanel()"><i class="fa fa-cloud-download"></i> 更新面板</button>
-      <button onclick="restartPanel()"><i class="fa fa-refresh"></i> 重启面板</button>
-      <button onclick="restartXray()"><i class="fa fa-repeat"></i> 重启Xray</button>
-      <span id="cv" class="badge"><i class="fa fa-cogs"></i> 当前 Xray:-</span>
-    </div>
-
-    <div class="card row">
-      <b><i class="fa fa-heartbeat"></i> 服务状态</b>
-      <span id="sp" class="badge">面板:-</span>
-      <span id="sx" class="badge">Xray:-</span>
-      <span id="si" class="badge">节点:-</span>
-    </div>
-
-    <div id="list"></div>
-  </div>
-
-  <div id="tab-settings" style="display:none">
-    <div class="card">
-      <div id="forceResetTip" style="display:none;color:var(--text-danger);margin-bottom:8px"><i class="fa fa-exclamation-circle"></i> 首次登录请先修改密码</div>
-      <h2><i class="fa fa-wrench"></i> 面板设置</h2>
-      <div class="grid">
-        <div>
-          <div class="muted"><i class="fa fa-user"></i> 用户名</div>
-          <input id="set_user" style="width:100%" />
-          <button style="margin-top:8px;width:100%" onclick="savePanelUsername()"><i class="fa fa-save"></i> 保存用户名</button>
-        </div>
-        <div>
-          <div class="muted"><i class="fa fa-path"></i> 面板路径</div>
-          <input id="set_path" placeholder="/" style="width:100%" />
-          <button style="margin-top:8px;width:100%" onclick="savePanelPath()"><i class="fa fa-save"></i> 保存路径</button>
-        </div>
-        <div>
-          <div class="muted"><i class="fa fa-key"></i> 修改密码</div>
-          <input id="set_old_pass" type="password" placeholder="旧密码（首次可留空）" style="width:100%" />
-          <input id="set_new_pass" type="password" placeholder="新密码（至少6位）" style="width:100%;margin-top:8px" />
-          <button style="margin-top:8px;width:100%" onclick="changePanelPassword()"><i class="fa fa-refresh"></i> 更新密码</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2><i class="fa fa-cogs"></i> Xray 版本管理</h2>
-      <div class="row">
-        <span id="xvNow" class="badge">当前 Xray: - / self-hosted</span>
-      </div>
-      <div class="row" style="margin-top:8px">
-        <select id="xvSel" class="grow"></select>
-        <button onclick="switchXrayVersion()"><i class="fa fa-upload"></i> 立即安装所选版本</button>
-      </div>
-      <div id="xvHint" class="muted" style="margin-top:8px">提示：下拉选择版本后点按钮即可安装，安装完成会自动重启 Xray 服务。</div>
-    </div>
-  </div>
-
-  <div id="tab-xray" style="display:none">
-    <div class="card">
-      <h2><i class="fa fa-file-code-o"></i> Xray 配置文件管理</h2>
-      <div class="row" style="margin-bottom:8px">
-        <button onclick="loadXrayConfig()"><i class="fa fa-refresh"></i> 读取配置</button>
-        <button onclick="saveXrayConfig()"><i class="fa fa-save"></i> 保存配置</button>
-        <button onclick="restartXray()"><i class="fa fa-repeat"></i> 保存后重启Xray</button>
-        <span class="grow"></span>
-        <span id="xcfgPath" class="badge">/etc/sui-xray/config.json</span>
-      </div>
-      <textarea id="xrayConfigText" style="width:100%;min-height:420px;font-family:monospace" placeholder="点击"读取配置"加载当前 Xray 配置"></textarea>
-      <div class="muted" style="margin-top:8px">说明：保存时会先做 JSON 校验与 Xray 配置测试，通过后才会落盘。</div>
-    </div>
-  </div>
-
-  <div id="tab-token" style="display:none">
-    <div class="card">
-      <h2><i class="fa fa-plug"></i> API Token（给 sui-sub 对接）</h2>
-      <div class="row" style="margin-top:8px">
-        <input id="set_panel_token" readonly style="max-width:520px" />
-        <button onclick="copyPanelToken()"><i class="fa fa-copy"></i> 复制 Token</button>
-        <button onclick="rotatePanelToken()"><i class="fa fa-random"></i> 重新生成 Token</button>
-      </div>
-      <div class="muted" style="margin-top:8px">提示：重新生成后旧 Token 立即失效，需同步更新到 sui-sub。</div>
-    </div>
-    <div class="card">
-      <h2><i class="fa fa-magic"></i> 一键对接到 sui-sub</h2>
-      <div class="row" style="margin-top:8px">
-        <input id="sub_url" placeholder="sui-sub 地址（如 https://sub.example.com）" style="min-width:280px" />
-        <input id="sub_user" placeholder="sui-sub 用户名" style="min-width:180px" />
-        <input id="sub_pass" type="password" placeholder="sui-sub 密码" style="min-width:180px" />
-        <input id="sub_source_name" placeholder="写入到 sub 的源名称（可选）" style="min-width:200px" />
-        <button onclick="connectToSub()"><i class="fa fa-send"></i> 一键写入</button>
-      </div>
-      <div class="muted" style="margin-top:8px">会自动把当前面板地址和 API Token 写入目标 sui-sub。</div>
-    </div>
-  </div>
-</div>
-
-<div id="modal" class="m"><div class="box">
-  <div class="row"><b id="mt"><i class="fa fa-plus-circle"></i> 新增节点</b><span class="grow"></span><button onclick="closeM()"><i class="fa fa-times"></i> 关 闭</button></div>
-  <div class="grid" style="margin-top:8px">
-    <input id="f_remark" placeholder="备注" />
-    <input id="f_port" placeholder="监听端口（主端口）" />
-    <select id="f_protocol"><option value="vless">vless</option><option value="vmess">vmess</option><option value="trojan">trojan</option><option value="shadowsocks">shadowsocks</option><option value="hysteria">hysteria2(hy2)</option><option value="socks">socks</option><option value="http">http</option><option value="dokodemo-door">dokodemo-door</option><option value="wireguard">wireguard</option><option value="tun">tun</option><option value="forward">port-forward</option></select>
-
-    <select id="f_forward_protocol" data-group="forward" style="width:140px"><option value="tcp">转发类型 TCP</option><option value="udp">转发类型 UDP</option><option value="both">转发类型 TCP+UDP</option></select>
-    <input id="f_forward_target_host" data-group="forward" placeholder="目标IP/域名" />
-    <input id="f_forward_target_port" data-group="forward" placeholder="目标端口" />
-
-    <select id="f_network"><option>tcp</option><option>ws</option><option>xhttp</option><option>grpc</option><option>httpupgrade</option><option>kcp</option></select>
-    <select id="f_security"><option>none</option><option>tls</option><option value="reality">reality</option></select>
-    <input id="f_email" placeholder="email(tag)" />
-
-    <select id="f_chain_enabled"><option value="0">链式代理：关闭</option><option value="1">链式代理：开启（绑定1个下游）</option></select>
-    <select id="f_chain_type" data-group="chain"><option value="socks5">下游类型 socks5</option><option value="http">下游类型 http</option><option value="reality">下游类型 reality(vless)</option><option value="shadowsocks">下游类型 shadowsocks</option></select>
-    <input id="f_chain_domain" data-group="chain" placeholder="域名规则（可空；支持 example.com / .example.com / api.example.com，多个可逗号或换行分隔）" />
-    <select id="f_chain_enhance" data-group="chain"><option value="1">域名分流增强：开启（推荐）</option><option value="0">域名分流增强：关闭</option></select>
-    <select id="f_chain_udp443_policy" data-group="chain"><option value="block">UDP/443策略：拦截（推荐）</option><option value="direct">UDP/443策略：直连</option></select>
-
-    <input id="f_uuid" placeholder="uuid" data-group="uuid" />
-    <input id="f_password" placeholder="password" data-group="password" />
-    <input id="f_method" placeholder="method" data-group="method" value="aes-128-gcm" />
-
-    <input id="f_flow" placeholder="flow(如 xtls-rprx-vision)" data-group="flow" />
-    <input id="f_path" placeholder="ws path" data-group="ws" value="/" />
-    <input id="f_host" placeholder="ws host" data-group="ws" />
-
-    <input id="f_sni" placeholder="sni" data-group="tls" />
-    <input id="f_hy2_hop_ports" placeholder="hy2 端口跳跃范围（可选；不填=只用主端口。例：20000-20100 或 20000,20010-20020）" data-group="hy2hop" />
-    <input id="f_hy2_hop_interval" placeholder="hy2 跳跃间隔秒（可选；默认 30。例：30 或 20-40，最小 5）" data-group="hy2hop" />
-    <input id="f_hy2_alpn" placeholder="HY2 ALPN（逗号分隔，默认 h3）" data-group="hy2" />
-    <select id="f_hy2_insecure" data-group="hy2"><option value="1">HY2 证书校验：关闭(allowInsecure)</option><option value="0">HY2 证书校验：开启</option></select>
-    <input id="f_hy2_obfs_password" placeholder="HY2 obfs-password（salamander，可选）" data-group="hy2" />
-    <input id="f_realityDest" placeholder="reality dest (如 addons.mozilla.org:443)" data-group="reality" />
-    <input id="f_shortId" placeholder="shortId" data-group="reality" />
-
-    <input id="f_privateKey" placeholder="privateKey" data-group="reality" />
-    <input id="f_publicKey" placeholder="publicKey(展示用)" data-group="reality" />
-
-    <input id="f_chain_host" data-group="chain" placeholder="下游地址 host" />
-    <input id="f_chain_port" data-group="chain" placeholder="下游端口 port" />
-    <input id="f_chain_user" data-group="chainAuth" placeholder="下游账号（http/socks可选）" />
-    <input id="f_chain_pass" data-group="chainAuth" placeholder="下游密码（http/socks可选）" />
-
-    <input id="f_chain_uuid" data-group="chainReality" placeholder="Reality 下游 UUID" />
-    <input id="f_chain_server_name" data-group="chainReality" placeholder="Reality SNI / serverName" />
-    <input id="f_chain_public_key" data-group="chainReality" placeholder="Reality publicKey" />
-    <input id="f_chain_short_id" data-group="chainReality" placeholder="Reality shortId" />
-    <input id="f_chain_flow" data-group="chainReality" placeholder="Reality flow(默认 xtls-rprx-vision)" />
-
-    <input id="f_chain_ss_method" data-group="chainSS" placeholder="SS method (默认 aes-128-gcm)" />
-    <input id="f_chain_ss_password" data-group="chainSS" placeholder="SS password" />
-  </div>
-  <div class="row" style="margin-top:10px">
-    <button onclick="genUUID()"><i class="fa fa-random"></i> 生成 UUID</button>
-    <button onclick="randSni()"><i class="fa fa-globe"></i> 随机 SNI</button>
-    <button onclick="genReality()"><i class="fa fa-key"></i> 生成 Reality 密钥</button>
-    <button onclick="applyNodeSpeedPreset()"><i class="fa fa-star"></i> 推荐参数</button>
-    <button onclick="testChainConnectivity()"><i class="fa fa-plug"></i> 测试下游连通性</button>
-    <span class="grow"></span>
-    <button onclick="submitAdd()"><i class="fa fa-save"></i> 保 存</button>
-  </div>
-</div></div>
-
-<div id="qrModal" class="m"><div class="box" style="max-width:420px">
-  <div class="row"><b><i class="fa fa-qrcode"></i> 二维码</b><span class="grow"></span><button onclick="qrModal.classList.remove('show')"><i class="fa fa-times"></i> 关 闭</button></div>
-  <img id="qrImg" style="max-width:320px;width:100%;background:#fff;padding:8px;border-radius:8px" />
-  <textarea id="qrLink" style="width:100%;min-height:72px"></textarea>
-  <button onclick="navigator.clipboard.writeText(qrLink.value)"><i class="fa fa-copy"></i> 复制链接</button>
-</div></div>
-
-<div id="toastWrap" class="toast-wrap"></div>
+<body><div id="login" class="wrap"><div class="card"><h2>苏逸面板</h2><input id="lu" placeholder="请输入用户名" style="width:100%" /><input id="lp" type="password" placeholder="请输入密码" style="width:100%;margin-top:8px" /><button style="width:100%;margin-top:10px" onclick="doLogin()">登 录</button><div id="le" style="margin-top:8px"></div></div></div><div id="app" class="wrap" style="display:none"><div class="card row tabs"><b>苏逸面板</b><button id="tabMainBtn" class="on" onclick="switchTab('main')">节点管理</button><button id="tabSettingsBtn" onclick="switchTab('settings')">面板设置</button><button id="tabXrayBtn" onclick="switchTab('xray')">Xray管理</button><button id="tabTokenBtn" onclick="switchTab('token')">对接Token</button><span class="grow"></span><button class="danger" onclick="logout()">退 出</button></div><div id="tab-main"><div class="card row"><input id="q" class="grow" placeholder="搜索备注 / 端口 / 协议" /><button onclick="loadData()">刷新节点</button><button onclick="openAdd()">新 增</button><button onclick="quickReality()">一键 Reality</button><button onclick="updatePanel()">更新面板</button><button onclick="restartPanel()">重启面板</button><button onclick="restartXray()">重启Xray</button><span id="cv" class="badge">当前 Xray:-</span></div><div class="card row"><b>服务状态</b><span id="sp" class="badge">面板:-</span><span id="sx" class="badge">Xray:-</span><span id="si" class="badge">节点:-</span></div><div id="list"></div></div><div id="tab-settings" style="display:none"><div class="card"><div id="forceResetTip" style="display:none;color:var(--text-danger);margin-bottom:8px">首次登录请先修改密码</div><h2>面板设置</h2><div class="grid"><div><div class="muted">用户名</div><input id="set_user" style="width:100%" /><button style="margin-top:8px;width:100%" onclick="savePanelUsername()">保存用户名</button></div><div><div class="muted">面板路径</div><input id="set_path" placeholder="/" style="width:100%" /><button style="margin-top:8px;width:100%" onclick="savePanelPath()">保存路径</button></div><div><div class="muted">修改密码</div><input id="set_old_pass" type="password" placeholder="旧密码（首次可留空）" style="width:100%" /><input id="set_new_pass" type="password" placeholder="新密码（至少6位）" style="width:100%;margin-top:8px" /><button style="margin-top:8px;width:100%" onclick="changePanelPassword()">更新密码</button></div></div></div><div class="card"><h2>Xray 版本管理</h2><div class="row"><span id="xvNow" class="badge">当前 Xray: - / self-hosted</span></div><div class="row" style="margin-top:8px"><select id="xvSel" class="grow"></select><button onclick="switchXrayVersion()">立即安装所选版本</button></div><div id="xvHint" class="muted" style="margin-top:8px">提示：下拉选择版本后点按钮即可安装，安装完成会自动重启 Xray 服务。</div></div></div><div id="tab-xray" style="display:none"><div class="card"><h2>Xray 配置文件管理</h2><div class="row" style="margin-bottom:8px"><button onclick="loadXrayConfig()">读取配置</button><button onclick="saveXrayConfig()">保存配置</button><button onclick="restartXray()">保存后重启Xray</button><span class="grow"></span><span id="xcfgPath" class="badge">/etc/sui-xray/config.json</span></div><textarea id="xrayConfigText" style="width:100%;min-height:420px;font-family:monospace" placeholder="点击"读取配置"加载当前 Xray 配置"></textarea><div class="muted" style="margin-top:8px">说明：保存时会先做 JSON 校验与 Xray 配置测试，通过后才会落盘。</div></div></div><div id="tab-token" style="display:none"><div class="card"><h2>API Token（给 sui-sub 对接）</h2><div class="row" style="margin-top:8px"><input id="set_panel_token" readonly style="max-width:520px" /><button onclick="copyPanelToken()">复制 Token</button><button onclick="rotatePanelToken()">重新生成 Token</button></div><div class="muted" style="margin-top:8px">提示：重新生成后旧 Token 立即失效，需同步更新到 sui-sub。</div></div><div class="card"><h2>一键对接到 sui-sub</h2><div class="row" style="margin-top:8px"><input id="sub_url" placeholder="sui-sub 地址（如 https://sub.example.com）" style="min-width:280px" /><input id="sub_user" placeholder="sui-sub 用户名" style="min-width:180px" /><input id="sub_pass" type="password" placeholder="sui-sub 密码" style="min-width:180px" /><input id="sub_source_name" placeholder="写入到 sub 的源名称（可选）" style="min-width:200px" /><button onclick="connectToSub()">一键写入</button></div><div class="muted" style="margin-top:8px">会自动把当前面板地址和 API Token 写入目标 sui-sub。</div></div></div></div><div id="modal" class="m"><div class="box"><div class="row"><b id="mt">新增节点</b><span class="grow"></span><button onclick="closeM()">关 闭</button></div><div class="grid" style="margin-top:8px"><input id="f_remark" placeholder="备注" /><input id="f_port" placeholder="监听端口（主端口）" /><select id="f_protocol"><option value="vless">vless</option><option value="vmess">vmess</option><option value="trojan">trojan</option><option value="shadowsocks">shadowsocks</option><option value="hysteria">hysteria2(hy2)</option><option value="socks">socks</option><option value="http">http</option><option value="dokodemo-door">dokodemo-door</option><option value="wireguard">wireguard</option><option value="tun">tun</option><option value="forward">port-forward</option></select><select id="f_forward_protocol" data-group="forward" style="width:140px"><option value="tcp">转发类型 TCP</option><option value="udp">转发类型 UDP</option><option value="both">转发类型 TCP+UDP</option></select><input id="f_forward_target_host" data-group="forward" placeholder="目标IP/域名" /><input id="f_forward_target_port" data-group="forward" placeholder="目标端口" /><select id="f_network"><option>tcp</option><option>ws</option><option>xhttp</option><option>grpc</option><option>httpupgrade</option><option>kcp</option></select><select id="f_security"><option>none</option><option>tls</option><option value="reality">reality</option></select><input id="f_email" placeholder="email(tag)" /><select id="f_chain_enabled"><option value="0">链式代理：关闭</option><option value="1">链式代理：开启（绑定1个下游）</option></select><select id="f_chain_type" data-group="chain"><option value="socks5">下游类型 socks5</option><option value="http">下游类型 http</option><option value="reality">下游类型 reality(vless)</option><option value="shadowsocks">下游类型 shadowsocks</option></select><input id="f_chain_domain" data-group="chain" placeholder="域名规则（可空；支持 example.com / .example.com / api.example.com，多个可逗号或换行分隔）" /><select id="f_chain_enhance" data-group="chain"><option value="1">域名分流增强：开启（推荐）</option><option value="0">域名分流增强：关闭</option></select><select id="f_chain_udp443_policy" data-group="chain"><option value="block">UDP/443策略：拦截（推荐）</option><option value="direct">UDP/443策略：直连</option></select><input id="f_uuid" placeholder="uuid" data-group="uuid" /><input id="f_password" placeholder="password" data-group="password" /><input id="f_method" placeholder="method" data-group="method" value="aes-128-gcm" /><input id="f_flow" placeholder="flow(如 xtls-rprx-vision)" data-group="flow" /><input id="f_path" placeholder="ws path" data-group="ws" value="/" /><input id="f_host" placeholder="ws host" data-group="ws" /><input id="f_sni" placeholder="sni" data-group="tls" /><input id="f_hy2_hop_ports" placeholder="hy2 端口跳跃范围（可选；不填=只用主端口。例：20000-20100 或 20000,20010-20020）" data-group="hy2hop" /><input id="f_hy2_hop_interval" placeholder="hy2 跳跃间隔秒（可选；默认 30。例：30 或 20-40，最小 5）" data-group="hy2hop" /><input id="f_hy2_alpn" placeholder="HY2 ALPN（逗号分隔，默认 h3）" data-group="hy2" /><select id="f_hy2_insecure" data-group="hy2"><option value="1">HY2 证书校验：关闭(allowInsecure)</option><option value="0">HY2 证书校验：开启</option></select><input id="f_hy2_obfs_password" placeholder="HY2 obfs-password（salamander，可选）" data-group="hy2" /><input id="f_realityDest" placeholder="reality dest (如 addons.mozilla.org:443)" data-group="reality" /><input id="f_shortId" placeholder="shortId" data-group="reality" /><input id="f_privateKey" placeholder="privateKey" data-group="reality" /><input id="f_publicKey" placeholder="publicKey(展示用)" data-group="reality" /><input id="f_chain_host" data-group="chain" placeholder="下游地址 host" /><input id="f_chain_port" data-group="chain" placeholder="下游端口 port" /><input id="f_chain_user" data-group="chainAuth" placeholder="下游账号（http/socks可选）" /><input id="f_chain_pass" data-group="chainAuth" placeholder="下游密码（http/socks可选）" /><input id="f_chain_uuid" data-group="chainReality" placeholder="Reality 下游 UUID" /><input id="f_chain_server_name" data-group="chainReality" placeholder="Reality SNI / serverName" /><input id="f_chain_public_key" data-group="chainReality" placeholder="Reality publicKey" /><input id="f_chain_short_id" data-group="chainReality" placeholder="Reality shortId" /><input id="f_chain_flow" data-group="chainReality" placeholder="Reality flow(默认 xtls-rprx-vision)" /><input id="f_chain_ss_method" data-group="chainSS" placeholder="SS method (默认 aes-128-gcm)" /><input id="f_chain_ss_password" data-group="chainSS" placeholder="SS password" /></div><div class="row" style="margin-top:10px"><button onclick="genUUID()">生成 UUID</button><button onclick="randSni()">随机 SNI</button><button onclick="genReality()">生成 Reality 密钥</button><button onclick="applyNodeSpeedPreset()">推荐参数</button><button onclick="testChainConnectivity()">测试下游连通性</button><span class="grow"></span><button onclick="submitAdd()">保 存</button></div></div></div><div id="qrModal" class="m"><div class="box" style="max-width:420px"><div class="row"><b>二维码</b><span class="grow"></span><button onclick="qrModal.classList.remove('show')">关 闭</button></div><img id="qrImg" style="max-width:320px;width:100%;background:#fff;padding:8px;border-radius:8px" /><textarea id="qrLink" style="width:100%;min-height:72px"></textarea><button onclick="navigator.clipboard.writeText(qrLink.value)">复制链接</button></div></div><div id="toastWrap" class="toast-wrap"></div>
 
 <script>
 const $=id=>document.getElementById(id);
@@ -766,7 +510,7 @@ function upsertById(arr,item){const i=arr.findIndex(x=>x.id===item.id);if(i>=0)a
 function removeById(arr,id){const i=arr.findIndex(x=>x.id===id);if(i>=0)arr.splice(i,1)}
 
 // 渲染节点列表（保留原有逻辑，仅优化样式文字）
-function render(){const qv=(q.value||'').toLowerCase();list.innerHTML='';const rows=all.filter(x=>`${x.remark||''} ${x.port} ${x.protocol}`.toLowerCase().includes(qv));const frows=(forwards||[]).filter(x=>`${x.remark||''} ${x.listenPort} ${x.protocol} ${x.targetHost}`.toLowerCase().includes(qv));if(!rows.length&&!frows.length){list.innerHTML='<div class="card">暂无节点</div>';return;}for(const i of rows){const el=document.createElement('div');el.className='card';el.innerHTML=`<div class='row' style='justify-content:space-between'><div class='row'><b>【#${i.id}】${i.remark||''}</b><span class='badge'>${i.protocol}</span><span class='badge'>端口:${i.port}</span><span class='badge ${i.enable?'status-ok':'status-bad'}'>${i.enable?'启用':'停用'}</span></div><div class='muted'>下行：${bytes(i.down)} 上行：${bytes(i.up||0)}</div></div><div class='row'><button onclick='toggle(${i.id})'><i class="fa fa-toggle-on"></i> 开关</button><button onclick='openEdit(${i.id})'><i class="fa fa-pencil"></i> 编辑</button><button onclick='copyLink(${i.id})'><i class="fa fa-copy"></i> 复制链接</button><button onclick='showQR(${i.id})'><i class="fa fa-qrcode"></i> 二维码</button><button class='danger' onclick='delN(${i.id})'><i class="fa fa-trash"></i> 删除</button></div>`;list.appendChild(el)}for(const f of frows){const el=document.createElement('div');el.className='card';el.innerHTML=`<div class='row' style='justify-content:space-between'><div class='row'><b>【F#${f.id}】${f.remark||'port-forward'}</b><span class='badge'>forward/${f.protocol}</span><span class='badge'>监听:${f.listenPort}</span><span class='badge'>目标:${f.targetHost}:${f.targetPort}</span><span class='badge ${f.enabled?'status-ok':'status-bad'}'>${f.enabled?'启用':'停用'}</span></div><div class='muted'>端口转发</div></div><div class='row'><button onclick='toggleForward(${f.id})'><i class="fa fa-toggle-on"></i> 开关</button><button onclick='openEditForward(${f.id})'><i class="fa fa-pencil"></i> 编辑</button><button class='danger' onclick='delForward(${f.id})'><i class="fa fa-trash"></i> 删除</button></div>`;list.appendChild(el)}}
+function render(){const qv=(q.value||'').toLowerCase();list.innerHTML='';list.style.opacity='0.98';const rows=all.filter(x=>`${x.remark||''} ${x.port} ${x.protocol}`.toLowerCase().includes(qv));const frows=(forwards||[]).filter(x=>`${x.remark||''} ${x.listenPort} ${x.protocol} ${x.targetHost}`.toLowerCase().includes(qv));if(!rows.length&&!frows.length){list.innerHTML='<div class="card">暂无节点</div>';return;}for(const i of rows){const el=document.createElement('div');el.className='card';el.innerHTML=`<div class='row' style='justify-content:space-between'><div class='row'><b>【#${i.id}】${i.remark||''}</b><span class='badge'>${i.protocol}</span><span class='badge'>端口:${i.port}</span><span class='badge ${i.enable?'status-ok':'status-bad'}'>${i.enable?'启用':'停用'}</span></div><div class='muted'>下行：${bytes(i.down)} 上行：${bytes(i.up||0)}</div></div><div class='row'><button onclick='toggle(${i.id})'><i class="fa fa-toggle-on"></i> 开关</button><button onclick='openEdit(${i.id})'><i class="fa fa-pencil"></i> 编辑</button><button onclick='copyLink(${i.id})'><i class="fa fa-copy"></i> 复制链接</button><button onclick='showQR(${i.id})'><i class="fa fa-qrcode"></i> 二维码</button><button class='danger' onclick='delN(${i.id})'><i class="fa fa-trash"></i> 删除</button></div>`;list.appendChild(el)}for(const f of frows){const el=document.createElement('div');el.className='card';el.innerHTML=`<div class='row' style='justify-content:space-between'><div class='row'><b>【F#${f.id}】${f.remark||'port-forward'}</b><span class='badge'>forward/${f.protocol}</span><span class='badge'>监听:${f.listenPort}</span><span class='badge'>目标:${f.targetHost}:${f.targetPort}</span><span class='badge ${f.enabled?'status-ok':'status-bad'}'>${f.enabled?'启用':'停用'}</span></div><div class='muted'>端口转发</div></div><div class='row'><button onclick='toggleForward(${f.id})'><i class="fa fa-toggle-on"></i> 开关</button><button onclick='openEditForward(${f.id})'><i class="fa fa-pencil"></i> 编辑</button><button class='danger' onclick='delForward(${f.id})'><i class="fa fa-trash"></i> 删除</button></div>`;list.appendChild(el)}}
 
 // 节点操作相关（保留原有逻辑）
 async function toggle(id){const r=await api('/api/inbounds/'+id+'/toggle',{method:'POST',body:'{}'});if(!r.success)return notify(r.msg||'切换失败','err');if(r.obj)upsertById(all,r.obj);else{const n=all.find(x=>x.id===id);if(n)n.enable=!n.enable;}render()}
@@ -960,7 +704,7 @@ async function init(){let __qTimer=null;q.oninput=()=>{clearTimeout(__qTimer);__
   // 版本列表可能受外网影响较慢，改为后台加载，避免拖慢登录后节点显示
   loadXrayVersions();
   setInterval(loadStatus,15000);
-  setInterval(()=>{if(!forceReset && !modal.classList.contains('show') && !qrModal.classList.contains('show')) loadData();},10000);
+  // auto-refresh disabled per user request
 }
 
 // 页面启动逻辑（保留原有逻辑）
